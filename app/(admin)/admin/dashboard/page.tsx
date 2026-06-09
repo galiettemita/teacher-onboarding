@@ -1,38 +1,85 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/guards";
-import { signOut } from "@/lib/auth/config";
+import { AdminNav } from "@/components/admin/nav";
+import { getDashboardSummary } from "@/lib/db/queries/admin-teachers";
 
 export default async function AdminDashboard() {
   const user = await requireAdmin();
+  const summary = await getDashboardSummary({ role: user.role });
 
-  async function logout() {
-    "use server";
-    await signOut({ redirectTo: "/login" });
-  }
+  const tiles: Array<{ label: string; value: number; href?: string; tone?: string }> = [
+    { label: "Total teachers", value: summary.totalTeachers, href: "/admin/teachers" },
+    {
+      label: "Complete",
+      value: summary.completeTeachers,
+      href: "/admin/teachers?status=complete",
+      tone: "text-green-700",
+    },
+    {
+      label: "Incomplete",
+      value: summary.incompleteTeachers,
+      href: "/admin/teachers?status=incomplete",
+      tone: "text-amber-700",
+    },
+    {
+      label: "Pending reviews",
+      value: summary.pendingReviews,
+      href: "/admin/teachers?status=incomplete",
+      tone: "text-amber-700",
+    },
+    {
+      label: "Expired documents",
+      value: summary.expiredDocuments,
+      tone: "text-slate-700",
+    },
+  ];
 
   return (
-    <main className="flex-1 p-6 max-w-5xl mx-auto w-full">
-      <header className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Admin</h1>
-          <p className="text-slate-600">Signed in as {user.email}</p>
-        </div>
-        <form action={logout}>
-          <button
-            type="submit"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+    <>
+      <AdminNav email={user.email} active="dashboard" />
+      <main className="flex-1 p-6 max-w-6xl mx-auto w-full">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
+          <Link
+            href="/admin/teachers/new"
+            className="rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2"
           >
-            Sign out
-          </button>
-        </form>
-      </header>
+            Invite teacher
+          </Link>
+        </div>
 
-      <section className="bg-white rounded-xl shadow border border-slate-200 p-6">
-        <h2 className="text-lg font-medium text-slate-900 mb-2">Overview</h2>
-        <p className="text-slate-600">
-          Phase 3 will render the teacher list, completion percentages, and approve/reject
-          flow here. Phase 5 adds CSV export and the audit log viewer.
-        </p>
-      </section>
-    </main>
+        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+          {tiles.map((t) => {
+            const card = (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 h-full">
+                <div className="text-sm text-slate-600">{t.label}</div>
+                <div className={`mt-2 text-3xl font-semibold ${t.tone ?? "text-slate-900"}`}>
+                  {t.value}
+                </div>
+              </div>
+            );
+            return t.href ? (
+              <Link key={t.label} href={t.href} className="block hover:opacity-90">
+                {card}
+              </Link>
+            ) : (
+              <div key={t.label}>{card}</div>
+            );
+          })}
+        </section>
+
+        <section className="bg-white rounded-xl border border-slate-200 p-6">
+          <h2 className="text-lg font-medium text-slate-900 mb-2">Next steps</h2>
+          <ul className="text-slate-600 text-sm space-y-1 list-disc list-inside">
+            <li>
+              Open the <Link href="/admin/teachers" className="text-blue-700 hover:underline">teacher list</Link> to review uploads.
+            </li>
+            <li>
+              Manage required paperwork in <Link href="/admin/document-types" className="text-blue-700 hover:underline">document types</Link>.
+            </li>
+          </ul>
+        </section>
+      </main>
+    </>
   );
 }
