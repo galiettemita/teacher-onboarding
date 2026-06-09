@@ -1,47 +1,31 @@
-import NextAuth, { type DefaultSession } from "next-auth";
+import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { users, accounts, sessions, verificationTokens } from "@/lib/db/schema";
+import { authConfig, type AppRole } from "./config.edge";
 
-export type AppRole = "teacher" | "admin";
+export type { AppRole };
 
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      role: AppRole;
-    } & DefaultSession["user"];
-  }
-  interface User {
-    role?: AppRole;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    userId?: string;
-    role?: AppRole;
-  }
-}
-
+/**
+ * Full Node-runtime Auth.js config. Extends the edge-safe base with:
+ *  - Drizzle adapter (pulls in postgres driver — Node only)
+ *  - Credentials provider (pulls in bcryptjs — Node only)
+ *
+ * Use this in route handlers, server components, and the [...nextauth]
+ * route. DO NOT import this from `middleware.ts` (edge runtime). The
+ * middleware imports from `./config.edge` instead.
+ */
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // The adapter manages users/accounts/sessions/verificationTokens in our Postgres DB.
-  // We use JWT sessions (not DB sessions) so middleware can read role without a DB round-trip,
-  // BUT role is also re-checked on every protected page/route from the DB (defense in depth).
+  ...authConfig,
   adapter: DrizzleAdapter(db, {
     usersTable: users,
     accountsTable: accounts,
     sessionsTable: sessions,
     verificationTokensTable: verificationTokens,
   }),
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
-    error: "/login",
-  },
   providers: [
     Credentials({
       name: "Email + Password",
@@ -69,27 +53,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.userId = user.id as string;
-        token.role = (user as { role?: AppRole }).role;
-      }
-      // Re-hydrate role from DB on every token refresh so revoked admin loses access.
-      if (token.userId && !token.role) {
-        const [row] = await db
-          .select({ role: users.role })
-          .from(users)
-          .where(eq(users.id, token.userId))
-          .limit(1);
-        if (row) token.role = row.role as AppRole;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (token.userId) session.user.id = token.userId;
-      if (token.role) session.user.role = token.role;
-      return session;
-    },
-  },
 });

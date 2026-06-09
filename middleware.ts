@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { auth } from "@/lib/auth/edge";
 
-const PUBLIC_PATHS = ["/", "/login", "/unauthorized"];
+const PUBLIC_PATHS = new Set(["/", "/login", "/unauthorized"]);
 const PUBLIC_PREFIXES = ["/api/auth", "/_next", "/favicon", "/assets"];
 
 function isPublic(pathname: string): boolean {
-  if (PUBLIC_PATHS.includes(pathname)) return true;
+  if (PUBLIC_PATHS.has(pathname)) return true;
   return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
-export async function middleware(req: NextRequest) {
+export default auth((req) => {
   const { pathname } = req.nextUrl;
 
   // Cron uses shared-secret header, not session.
@@ -21,30 +20,18 @@ export async function middleware(req: NextRequest) {
   // Public assets and auth routes pass through.
   if (isPublic(pathname)) return NextResponse.next();
 
-  // All other routes require a valid session.
-  const token = await getToken({
-    req,
-    secret: process.env.AUTH_SECRET,
-    // Auth.js v5 uses these cookie names; pick whichever exists.
-    salt:
-      process.env.NODE_ENV === "production"
-        ? "__Secure-authjs.session-token"
-        : "authjs.session-token",
-  });
-
   const isApi = pathname.startsWith("/api/");
+  const session = req.auth;
 
-  if (!token?.userId) {
-    if (isApi) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+  if (!session?.user?.id) {
+    if (isApi) return new NextResponse("Unauthorized", { status: 401 });
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  const role = token.role;
+  const role = session.user.role;
 
   // Admin-only paths.
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) {
@@ -63,9 +50,8 @@ export async function middleware(req: NextRequest) {
   }
 
   return NextResponse.next();
-}
+});
 
 export const config = {
-  // Match everything except Next.js internals and static files (those are handled by isPublic too).
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

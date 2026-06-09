@@ -123,6 +123,10 @@ The seed is idempotent — re-running it updates the admin row in place rather t
 
 ---
 
+## Troubleshooting
+
+- **`pnpm dev` fails with `EvalError: Code generation from strings disallowed for this context`** — this happens when your shell has `NODE_ENV=production` exported. Auth.js's edge bundle is initialized in a stricter VM under prod mode. Run dev with `NODE_ENV=development pnpm dev` or `unset NODE_ENV` first. `pnpm build` / `pnpm start` are unaffected.
+
 ## Known limitations (Phase 1)
 
 - `POST /api/upload` and `GET /api/files/[id]` are stubs that return `501`. Phase 2 wires up the full validation pipeline (magic-byte sniff, 10 MB cap, sha256, DB row, audit log) and the protected download.
