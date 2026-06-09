@@ -1,0 +1,36 @@
+# deps
+node_modules
+.pnpm-store
+
+# next
+.next
+out
+next-env.d.ts
+
+# env
+.env
+.env.local
+.env*.local
+
+# build / cache
+*.tsbuildinfo
+.turbo
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# os
+.DS_Store
+
+# editor
+.vscode
+.idea
+
+# private file storage (dev only)
+.uploads/
+
+# drizzle
+drizzle/meta/
