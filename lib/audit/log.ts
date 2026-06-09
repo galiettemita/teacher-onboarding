@@ -25,7 +25,8 @@ export type AuditAction =
   | "doc_type.deactivate"
   | "user.invite"
   | "file.download"
-  | "file.missing";
+  | "file.missing"
+  | "report.export";
 
 export type AuditTargetType =
   | "document"

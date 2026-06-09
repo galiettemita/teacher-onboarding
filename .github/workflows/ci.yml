@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+        env:
+          # Build needs SOME values; these are throwaway and never reach
+          # runtime — Next bakes only the public ones into the client.
+          AUTH_SECRET: ci-build-secret-not-for-runtime
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          CRON_SECRET: ci-cron-secret-not-for-runtime
+          # Sentinel value the leakage check looks for. If this ever ends
+          # up in .next/static/** we fail the build.
+          SUPABASE_SERVICE_ROLE_KEY: ci-service-role-sentinel-never-leak-this
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+      - name: Service-role key leakage check
+        run: pnpm test:leakage
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ci-service-role-sentinel-never-leak-this

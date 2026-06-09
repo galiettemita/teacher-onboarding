@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth/edge";
+import { clientIp, enforceRateLimit } from "@/lib/rate-limit/edge";
 
 const PUBLIC_PATHS = new Set(["/", "/login", "/unauthorized"]);
 const PUBLIC_PREFIXES = ["/api/auth", "/_next", "/favicon", "/assets"];
@@ -11,6 +12,14 @@ function isPublic(pathname: string): boolean {
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
+
+  // Rate limits run before auth so /api/auth/** is still throttled.
+  const limited = enforceRateLimit({
+    pathname,
+    ip: clientIp(req),
+    userId: req.auth?.user?.id ?? null,
+  });
+  if (limited) return limited;
 
   // Cron uses shared-secret header, not session.
   if (pathname.startsWith("/api/cron")) {
