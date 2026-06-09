@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/guards";
 import { AdminNav } from "@/components/admin/nav";
 import { ReviewActions } from "@/components/admin/review-actions";
-import { StatusBadge, type DocStatus } from "@/components/status-badge";
+import { StatusBadge } from "@/components/status-badge";
 import { getTeacherDetail } from "@/lib/db/queries/admin-teachers";
+import { deriveUiStatus } from "@/lib/expiry";
 import { NotFoundError } from "@/lib/errors";
 
 function formatDate(d: Date | null | undefined): string {
@@ -109,7 +110,7 @@ export default async function TeacherDetailPage({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={d.status as DocStatus} />
+                      <StatusBadge status={deriveUiStatus(d)} />
                     </td>
                     <td className="px-4 py-3 text-slate-600 tabular-nums">
                       {formatDate(d.uploadedAt)}

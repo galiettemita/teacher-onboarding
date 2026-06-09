@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   documentTypes,
@@ -7,6 +7,7 @@ import {
   type TeacherDocument,
 } from "@/lib/db/schema";
 import type { SessionUser } from "@/lib/auth/guards";
+import { linkSupersession } from "@/lib/expiry/supersession";
 
 /**
  * All teacher-document queries take `currentUser` and filter by it. There is
@@ -187,25 +188,46 @@ export type InsertMyDocumentInput = {
  * to `currentUser.id` regardless of any input — callers cannot upload on
  * behalf of another teacher even if they pass a different id by accident.
  * Status defaults to `pending` via the schema.
+ *
+ * Renewal supersession (Phase 4): if a previous non-superseded
+ * approved/expired/rejected row exists for the same (user, doctype), it is
+ * linked via `superseded_by = new.id` in the same transaction. Pending
+ * previous rows are left alone — admins may still review them.
  */
 export async function insertMyDocument(
   currentUser: SessionUser,
   input: InsertMyDocumentInput
 ): Promise<TeacherDocument> {
   assertTeacher(currentUser);
-  const [row] = await db
-    .insert(teacherDocuments)
-    .values({
-      userId: currentUser.id,
-      documentTypeId: input.documentTypeId,
-      storageKey: input.storageKey,
-      originalFilename: input.originalFilename,
-      mimeType: input.mimeType,
-      sizeBytes: input.sizeBytes,
-      sha256: input.sha256,
-    })
-    .returning();
-  return row;
+  return db.transaction(async (tx) => {
+    const [previous] = await tx
+      .select({ id: teacherDocuments.id })
+      .from(teacherDocuments)
+      .where(
+        and(
+          eq(teacherDocuments.userId, currentUser.id),
+          eq(teacherDocuments.documentTypeId, input.documentTypeId),
+          isNull(teacherDocuments.supersededBy),
+          inArray(teacherDocuments.status, ["approved", "expired", "rejected"])
+        )
+      )
+      .orderBy(desc(teacherDocuments.uploadedAt))
+      .limit(1);
+    const [row] = await tx
+      .insert(teacherDocuments)
+      .values({
+        userId: currentUser.id,
+        documentTypeId: input.documentTypeId,
+        storageKey: input.storageKey,
+        originalFilename: input.originalFilename,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        sha256: input.sha256,
+      })
+      .returning();
+    if (previous) await linkSupersession(row.id, previous.id, tx);
+    return row;
+  });
 }
 
 /**

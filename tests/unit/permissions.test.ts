@@ -45,7 +45,22 @@ vi.mock("@/lib/db/client", () => {
     }),
   }));
 
-  return { db: { select, insert } };
+  const update = vi.fn(() => ({
+    set: () => ({
+      where: () => ({
+        returning: async () => [],
+      }),
+    }),
+  }));
+
+  // Phase 4: insertMyDocument now runs inside a transaction so the
+  // supersession link can ride on the same unit-of-work.
+  const transaction = vi.fn(
+    async (fn: (tx: { select: typeof select; insert: typeof insert; update: typeof update }) => Promise<unknown>) =>
+      fn({ select, insert, update })
+  );
+
+  return { db: { select, insert, update, transaction } };
 });
 
 import {

@@ -6,6 +6,7 @@ import {
   type TeacherDocument,
 } from "@/lib/db/schema";
 import { auditLog } from "@/lib/audit/log";
+import { setExpiryOnApproval } from "@/lib/expiry";
 import {
   ConflictError,
   ForbiddenError,
@@ -36,12 +37,10 @@ async function loadDoc(docId: string): Promise<TeacherDocument> {
  * with ConflictError (409). Approving an already-approved doc is also a
  * conflict (terminal write — we want loud failure rather than a silent no-op).
  *
- * Expiry: PROJECT_CONTEXT §3.4 says approval should set `expires_at` when
- * the doc type has a renewal cadence. Phase 4 (Agent 4) owns the helper
- * `lib/expiry/setExpiryOnApproval`. Until that ships we leave expires_at
- * null and let Agent 4's PR backfill via cron / rebase.
- * TODO(agent-4): import setExpiryOnApproval from "@/lib/expiry" and call it
- * here once feature/renewal-tracking lands.
+ * Expiry: `expires_at = reviewed_at + docType.renewal_months months` via
+ * `setExpiryOnApproval` (see lib/expiry). The daily cron flips approved
+ * past-due rows to `expired`; this query is the only place that sets
+ * `expires_at` in the happy path.
  */
 export async function approveDocument(
   currentAdmin: { id: string; role: string },
@@ -61,16 +60,14 @@ export async function approveDocument(
     );
   }
 
-  // Look up the doc type now so a future Agent 4 hook has it ready.
   const [docType] = await db
     .select()
     .from(documentTypes)
     .where(eq(documentTypes.id, doc.documentTypeId))
     .limit(1);
-  // (docType is intentionally unused for now; reserved for setExpiryOnApproval)
-  void docType;
 
   const now = new Date();
+  const expiresAt = setExpiryOnApproval({ reviewedAt: now }, docType);
   const [updated] = await db
     .update(teacherDocuments)
     .set({
@@ -78,7 +75,7 @@ export async function approveDocument(
       reviewedAt: now,
       reviewedBy: currentAdmin.id,
       rejectionReason: null,
-      // expiresAt: setExpiryOnApproval(doc, docType)  // TODO(agent-4)
+      expiresAt,
     })
     .where(eq(teacherDocuments.id, doc.id))
     .returning();

@@ -68,7 +68,24 @@ vi.mock("@/lib/db/client", () => {
     return chain;
   });
 
-  return { db: { select, insert } };
+  // Phase 4 (Agent 4) wrapped insertMyDocument in a transaction so the
+  // new-doc insert and the supersession update happen atomically. Mock
+  // `db.transaction` by passing a tx-shaped handle with the same select/
+  // insert/update helpers — supersession's previous-row select returns
+  // empty (no superseded link) and update is a no-op.
+  const update = vi.fn(() => ({
+    set: () => ({
+      where: () => ({
+        returning: async () => [],
+      }),
+    }),
+  }));
+  const transaction = vi.fn(
+    async (fn: (tx: { select: typeof select; insert: typeof insert; update: typeof update }) => Promise<unknown>) =>
+      fn({ select, insert, update })
+  );
+
+  return { db: { select, insert, update, transaction } };
 });
 
 vi.mock("@/lib/storage", async () => {

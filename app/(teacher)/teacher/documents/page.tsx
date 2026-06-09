@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireTeacher } from "@/lib/auth/guards";
 import { listMyDocumentsWithType } from "@/lib/db/queries/teacher-documents";
 import { StatusBadge } from "@/components/status-badge";
-import { deriveUiStatus } from "@/lib/db/queries/teacher-documents";
+import { deriveUiStatus } from "@/lib/expiry";
 
 export const dynamic = "force-dynamic";
 
