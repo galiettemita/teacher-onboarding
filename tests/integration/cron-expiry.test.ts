@@ -96,46 +96,77 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function makeRequest(secret?: string | null): Request {
+type AuthShape =
+  | { kind: "none" }
+  | { kind: "bearer"; secret: string }
+  | { kind: "raw"; value: string }
+  | { kind: "x-cron-secret"; secret: string };
+
+function makeRequest(method: "GET" | "POST", auth: AuthShape): Request {
   const headers: Record<string, string> = {};
-  if (secret !== null && secret !== undefined) {
-    headers["x-cron-secret"] = secret;
+  if (auth.kind === "bearer") {
+    headers["authorization"] = `Bearer ${auth.secret}`;
+  } else if (auth.kind === "raw") {
+    headers["authorization"] = auth.value;
+  } else if (auth.kind === "x-cron-secret") {
+    headers["x-cron-secret"] = auth.secret;
   }
-  return new Request("http://localhost/api/cron/expiry", {
-    method: "POST",
-    headers,
-  });
+  return new Request("http://localhost/api/cron/expiry", { method, headers });
 }
 
-describe("POST /api/cron/expiry", () => {
-  it("401 when secret header is missing", async () => {
-    const { POST } = await import("@/app/api/cron/expiry/route");
-    const res = await POST(makeRequest(null));
+describe("/api/cron/expiry auth", () => {
+  it("401 when Authorization header is missing", async () => {
+    const { GET } = await import("@/app/api/cron/expiry/route");
+    const res = await GET(makeRequest("GET", { kind: "none" }));
     expect(res.status).toBe(401);
     expect(jobRunInsertCount).toBe(0);
     expect(documentsUpdateCalls).toBe(0);
   });
 
-  it("401 when secret header does not match env", async () => {
-    const { POST } = await import("@/app/api/cron/expiry/route");
-    const res = await POST(makeRequest("wrong-secret"));
+  it("401 when Bearer token does not match env", async () => {
+    const { GET } = await import("@/app/api/cron/expiry/route");
+    const res = await GET(
+      makeRequest("GET", { kind: "bearer", secret: "wrong-secret" })
+    );
     expect(res.status).toBe(401);
     expect(jobRunInsertCount).toBe(0);
   });
 
-  it("401 when CRON_SECRET is not configured", async () => {
-    delete process.env.CRON_SECRET;
-    const { POST } = await import("@/app/api/cron/expiry/route");
-    const res = await POST(makeRequest("anything"));
+  it("401 when scheme is not Bearer", async () => {
+    const { GET } = await import("@/app/api/cron/expiry/route");
+    const res = await GET(
+      makeRequest("GET", { kind: "raw", value: "Basic shh-its-a-secret" })
+    );
     expect(res.status).toBe(401);
   });
 
+  it("401 when legacy X-Cron-Secret header is used (Vercel only sends Authorization)", async () => {
+    const { GET } = await import("@/app/api/cron/expiry/route");
+    const res = await GET(
+      makeRequest("GET", { kind: "x-cron-secret", secret: "shh-its-a-secret" })
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("401 when CRON_SECRET is not configured", async () => {
+    delete process.env.CRON_SECRET;
+    const { GET } = await import("@/app/api/cron/expiry/route");
+    const res = await GET(
+      makeRequest("GET", { kind: "bearer", secret: "anything" })
+    );
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /api/cron/expiry (Vercel-invoked)", () => {
   it("200 + sweeps past-due approved rows and writes telemetry", async () => {
     candidatesForSelect = [{ id: "d1" }, { id: "d2" }];
     candidatesForUpdate = [{ id: "d1" }, { id: "d2" }];
 
-    const { POST } = await import("@/app/api/cron/expiry/route");
-    const res = await POST(makeRequest("shh-its-a-secret"));
+    const { GET } = await import("@/app/api/cron/expiry/route");
+    const res = await GET(
+      makeRequest("GET", { kind: "bearer", secret: "shh-its-a-secret" })
+    );
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ expired: 2 });
@@ -143,10 +174,8 @@ describe("POST /api/cron/expiry", () => {
     expect(jobRunInsertCount).toBe(1);
     expect(jobRunInsertedRow?.jobName).toBe("expiry_sweep");
     expect(jobRunInsertedRow?.status).toBe("running");
-
     expect(documentsUpdateCalls).toBe(1);
 
-    // job-runs row updated with success + counts
     expect(jobRunUpdateCalls).toHaveLength(1);
     const final = jobRunUpdateCalls[0].set;
     expect(final.status).toBe("success");
@@ -156,11 +185,13 @@ describe("POST /api/cron/expiry", () => {
   });
 
   it("idempotent: rerun with zero candidates → 0 expired, success row still written", async () => {
-    candidatesForSelect = []; // nothing past-due (already swept)
+    candidatesForSelect = [];
     candidatesForUpdate = [];
 
-    const { POST } = await import("@/app/api/cron/expiry/route");
-    const res = await POST(makeRequest("shh-its-a-secret"));
+    const { GET } = await import("@/app/api/cron/expiry/route");
+    const res = await GET(
+      makeRequest("GET", { kind: "bearer", secret: "shh-its-a-secret" })
+    );
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual({ expired: 0 });
@@ -175,8 +206,10 @@ describe("POST /api/cron/expiry", () => {
     candidatesForSelect = [{ id: "d1" }];
     updateShouldThrow = true;
 
-    const { POST } = await import("@/app/api/cron/expiry/route");
-    const res = await POST(makeRequest("shh-its-a-secret"));
+    const { GET } = await import("@/app/api/cron/expiry/route");
+    const res = await GET(
+      makeRequest("GET", { kind: "bearer", secret: "shh-its-a-secret" })
+    );
     expect(res.status).toBe(500);
 
     expect(jobRunInsertCount).toBe(1);
@@ -184,5 +217,20 @@ describe("POST /api/cron/expiry", () => {
     const final = jobRunUpdateCalls[0].set;
     expect(final.status).toBe("failed");
     expect(final.errorMessage).toMatch(/simulated db failure/);
+  });
+});
+
+describe("POST /api/cron/expiry (local-testing alias)", () => {
+  it("POST with Bearer also sweeps — same handler", async () => {
+    candidatesForSelect = [{ id: "d1" }];
+    candidatesForUpdate = [{ id: "d1" }];
+
+    const { POST } = await import("@/app/api/cron/expiry/route");
+    const res = await POST(
+      makeRequest("POST", { kind: "bearer", secret: "shh-its-a-secret" })
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ expired: 1 });
   });
 });

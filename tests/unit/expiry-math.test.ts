@@ -68,6 +68,15 @@ describe("setExpiryOnApproval", () => {
       setExpiryOnApproval({ reviewedAt: null }, docType(24))
     ).toThrow(/reviewedAt must be set/);
   });
+
+  it("renewalMonths=0 returns reviewedAt unchanged (caller must guard)", () => {
+    // Documented contract: setExpiryOnApproval is pure math. A
+    // renewalMonths of 0 produces the same instant — it's the caller's
+    // job (approveDocument) to skip the helper and store null instead.
+    const reviewed = new Date(Date.UTC(2025, 0, 15, 10, 30, 0));
+    const expires = setExpiryOnApproval(approvedDoc(reviewed), docType(0));
+    expect(expires.toISOString()).toBe(reviewed.toISOString());
+  });
 });
 
 describe("addMonthsUTC", () => {

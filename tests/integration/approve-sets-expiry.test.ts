@@ -95,6 +95,24 @@ describe("approveDocument sets expires_at", () => {
     expect(expires.toISOString()).toBe(expected.toISOString());
   });
 
+  it("renewalMonths=0 (one-time doc) → expiresAt is null, cron never touches it", async () => {
+    selectRows.push([
+      {
+        id: "doc-degree",
+        status: "pending",
+        documentTypeId: "dt-degree",
+        userId: "u-1",
+      },
+    ]);
+    selectRows.push([{ id: "dt-degree", renewalMonths: 0 }]);
+
+    await approveDocument(admin, "doc-degree");
+
+    expect(updateSetPayload).not.toBeNull();
+    expect(updateSetPayload?.status).toBe("approved");
+    expect(updateSetPayload?.expiresAt).toBeNull();
+  });
+
   it("respects a custom renewalMonths value (e.g. 12)", async () => {
     selectRows.push([
       {

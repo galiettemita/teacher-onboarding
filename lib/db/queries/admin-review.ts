@@ -41,6 +41,11 @@ async function loadDoc(docId: string): Promise<TeacherDocument> {
  * `setExpiryOnApproval` (see lib/expiry). The daily cron flips approved
  * past-due rows to `expired`; this query is the only place that sets
  * `expires_at` in the happy path.
+ *
+ * One-time documents (`renewal_months === 0`) get `expires_at = null` —
+ * a degree or background-check certificate never expires, so the cron
+ * must never sweep it. The pure-math helper is intentionally NOT called
+ * for those rows.
  */
 export async function approveDocument(
   currentAdmin: { id: string; role: string },
@@ -67,7 +72,10 @@ export async function approveDocument(
     .limit(1);
 
   const now = new Date();
-  const expiresAt = setExpiryOnApproval({ reviewedAt: now }, docType);
+  const expiresAt =
+    docType && docType.renewalMonths > 0
+      ? setExpiryOnApproval({ reviewedAt: now }, docType)
+      : null;
   const [updated] = await db
     .update(teacherDocuments)
     .set({

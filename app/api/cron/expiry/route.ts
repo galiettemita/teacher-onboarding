@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { and, eq, lt, sql } from "drizzle-orm";
+import crypto from "node:crypto";
+import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { scheduledJobRuns, teacherDocuments } from "@/lib/db/schema";
 
@@ -7,15 +8,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * `POST /api/cron/expiry`
- *
  * Daily sweep: any `approved` teacher_documents row whose `expires_at` is
  * in the past gets flipped to `expired`. The route is the only writer of
  * this transition; admin actions never set status to `expired` directly.
  *
- * Auth: header `X-Cron-Secret` must match `process.env.CRON_SECRET`. We
- * intentionally log nothing about the auth attempt to avoid leaking even
- * the existence of the endpoint to attackers (PROJECT_CONTEXT §11.3).
+ * Method: Vercel Cron invokes registered paths with **GET** and a
+ *   `Authorization: Bearer ${CRON_SECRET}` header. We export both `GET`
+ *   (the production path) and `POST` (handy for local `curl` testing) and
+ *   share one handler. The auth check uses `crypto.timingSafeEqual` so the
+ *   constant-time guarantee survives even though the header value isn't
+ *   secret-grade entropy.
  *
  * Telemetry: one row in `scheduled_job_runs` per invocation. Started
  * before the work; finished (success or failure) after. `metadata` carries
@@ -23,17 +25,32 @@ export const dynamic = "force-dynamic";
  *
  * Idempotency: rerunning produces zero new state changes — the WHERE
  * clause filters by `status='approved'`, so previously-expired rows are
- * already out of the candidate set.
+ * already out of the candidate set. We additionally guard on
+ * `expires_at IS NOT NULL` even though SQL's NULL semantics would skip
+ * them anyway — explicit is friendlier than tribal SQL knowledge.
  */
-export async function POST(req: Request): Promise<Response> {
-  const expected = process.env.CRON_SECRET;
-  const provided = req.headers.get("x-cron-secret");
-  if (!expected || !provided || provided !== expected) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
-  // Start the run-row first so a crash mid-sweep is visible in the
-  // telemetry table rather than silently dropped.
+function isAuthorized(req: Request): boolean {
+  const expected = process.env.CRON_SECRET;
+  if (!expected) return false;
+
+  const header = req.headers.get("authorization");
+  if (!header) return false;
+
+  // Format: `Bearer <secret>` (case-insensitive scheme).
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  if (!match) return false;
+  const provided = match[1];
+
+  // Constant-time compare. Buffer.from requires equal-length buffers to
+  // avoid throwing, so fast-path-reject mismatched lengths first.
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+async function runSweep(): Promise<Response> {
   const [run] = await db
     .insert(scheduledJobRuns)
     .values({
@@ -43,18 +60,17 @@ export async function POST(req: Request): Promise<Response> {
     .returning({ id: scheduledJobRuns.id });
 
   try {
-    // Count candidates (approved + past-due) in the same conceptual unit
-    // as the UPDATE. Doing it as a separate SELECT is cheaper than
-    // counting the UPDATE's affected rows on a per-row basis, and the
-    // race between count and update is non-fatal: at worst the
-    // `candidates_considered` undercounts by the rows that newly went
-    // past-due between the two statements.
+    // Candidates: approved + non-null + past-due. Counting separately
+    // from the UPDATE is fine — the race window is one statement wide
+    // and at worst we undercount candidates by rows that just went
+    // past-due, which doesn't affect correctness of the sweep itself.
     const candidates = await db
       .select({ id: teacherDocuments.id })
       .from(teacherDocuments)
       .where(
         and(
           eq(teacherDocuments.status, "approved"),
+          isNotNull(teacherDocuments.expiresAt),
           lt(teacherDocuments.expiresAt, sql`now()`)
         )
       );
@@ -65,6 +81,7 @@ export async function POST(req: Request): Promise<Response> {
       .where(
         and(
           eq(teacherDocuments.status, "approved"),
+          isNotNull(teacherDocuments.expiresAt),
           lt(teacherDocuments.expiresAt, sql`now()`)
         )
       )
@@ -85,8 +102,6 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ expired: expiredCount }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // Best-effort: mark the run as failed. If THIS write also fails
-    // there's nothing left to do but surface the original error.
     try {
       await db
         .update(scheduledJobRuns)
@@ -97,8 +112,23 @@ export async function POST(req: Request): Promise<Response> {
         })
         .where(eq(scheduledJobRuns.id, run.id));
     } catch {
-      // ignore
+      // best-effort; original error wins
     }
     return NextResponse.json({ error: "Sweep failed" }, { status: 500 });
   }
+}
+
+async function handle(req: Request): Promise<Response> {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return runSweep();
+}
+
+export async function GET(req: Request): Promise<Response> {
+  return handle(req);
+}
+
+export async function POST(req: Request): Promise<Response> {
+  return handle(req);
 }
