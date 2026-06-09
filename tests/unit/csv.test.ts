@@ -35,11 +35,50 @@ describe("toCsv", () => {
     expect(out).toContain('"x,y"');
   });
 
-  it("is injection-safe: leading = stays literal (consumer decides)", () => {
-    // RFC 4180 doesn't require sanitising formula-style cells; we
-    // document the choice. The cell is emitted as-is when it contains
-    // no delimiter chars. (Document expectation, don't auto-mangle.)
-    const out = toCsv(["a"], [["=SUM(1)"]]);
-    expect(out).toContain("=SUM(1)");
+});
+
+describe("CSV formula-injection defense", () => {
+  /**
+   * Excel / Google Sheets / LibreOffice interpret a cell that starts
+   * with =, +, -, @, TAB, or CR as a formula at open time. We prepend
+   * a single-quote before quoting, which spreadsheets strip on display.
+   */
+  it.each([
+    ["=SUM(1+1)", "'=SUM(1+1)"],
+    ["+1+1", "'+1+1"],
+    ["-1+1", "'-1+1"],
+    ["@SUM(A1)", "'@SUM(A1)"],
+    ["\tinjected", "'\tinjected"],
+    ["\rinjected", "'\rinjected"],
+  ])("neutralises dangerous prefix %j", (raw, escaped) => {
+    const out = escapeCell(raw);
+    // The output begins with the literal `'` (possibly wrapped in
+    // quotes if RFC 4180 escaping kicked in for tab / CR / comma).
+    const stripped = out.startsWith('"') ? out.slice(1, -1).replace(/""/g, '"') : out;
+    expect(stripped).toBe(escaped);
+  });
+
+  it("does NOT mangle a leading character that isn't dangerous", () => {
+    expect(escapeCell("safe text")).toBe("safe text");
+    expect(escapeCell("123")).toBe("123");
+    expect(escapeCell("a=b")).toBe("a=b"); // `=` not at position 0
+    expect(escapeCell("Apple, Inc.")).toBe('"Apple, Inc."');
+  });
+
+  it("protects the attack-on-secretary case end-to-end via toCsv", () => {
+    // A teacher who sets their name to `=cmd|'/c calc'!A1` cannot
+    // trigger code execution when the secretary opens the export.
+    const out = toCsv(["name"], [["=cmd|'/c calc'!A1"]]);
+    // Cell now starts with the neutralising apostrophe; whole field is
+    // also wrapped in quotes because the original contained `,` — wait,
+    // it didn't, but it does contain neither `,` nor `\n`, so no RFC
+    // 4180 quoting. Just the apostrophe.
+    const dataLine = out.replace(/^\uFEFF/, "").split("\r\n")[1];
+    expect(dataLine.startsWith("'=")).toBe(true);
+    expect(dataLine).not.toMatch(/^=cmd/);
+  });
+
+  it("treats empty string as benign (no apostrophe added)", () => {
+    expect(escapeCell("")).toBe("");
   });
 });

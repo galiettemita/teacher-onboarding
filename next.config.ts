@@ -1,35 +1,22 @@
 import type { NextConfig } from "next";
 
 /**
- * Security headers applied to every response. See docs/SECURITY.md §2 for
- * the rationale behind each directive. CSP is intentionally restrictive:
+ * Security headers applied to every response via Next.js's `headers()`
+ * config. See docs/SECURITY.md §2 for the rationale behind each directive.
  *
- *   - `default-src 'self'`          : block everything by default
- *   - `script-src 'self'`           : no inline JS, no remote JS
- *   - `style-src 'self' 'unsafe-inline'` : Next.js ships inline <style>
- *                                          chunks; tighten when we drop
- *                                          styled-jsx / inline runtime CSS
- *   - `img-src 'self' data:`        : data: URLs are needed for inline icons
- *   - `connect-src 'self'`          : no remote XHR/fetch
- *   - `frame-ancestors 'none'`      : belt for X-Frame-Options below
+ * Content-Security-Policy is NOT set here. It carries a per-request
+ * nonce and is emitted by `middleware.ts` (see lib/security/csp.ts).
+ * Setting CSP twice causes browsers to enforce the intersection, which
+ * would defeat the nonce. Middleware runs on every non-static-asset
+ * path; truly-static assets (_next/static, _next/image, favicon.ico)
+ * don't execute scripts so the lack of a CSP on those responses is
+ * harmless.
  */
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
-
 export const SECURITY_HEADERS = [
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
   },
-  { key: "Content-Security-Policy", value: CSP },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

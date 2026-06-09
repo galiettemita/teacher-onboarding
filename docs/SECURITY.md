@@ -21,7 +21,8 @@ in [`DEPLOY.md`](./DEPLOY.md).
 | 7 | File download endpoint | Hot-loop enumeration | 60 downloads / minute / user rate limit. UUID-only id path; non-UUID = 404 without DB lookup. |
 | 8 | Cron endpoint | Unauthorised expiry sweep / DoS | `Authorization: Bearer ${CRON_SECRET}` required; constant-time compare. |
 | 9 | Audit log | Tampering / silent failure | Single chokepoint writer (`lib/audit/log.ts`). Never throws to caller. Read-only access via admin-only viewer. |
-| 10 | Cookies & XSS | Session theft | `HttpOnly`, `Secure`, `SameSite=Lax`. CSP forbids inline `<script>`. `X-Frame-Options: DENY` blocks clickjacking. |
+| 10 | Cookies & XSS | Session theft | `HttpOnly`, `Secure`, `SameSite=Lax`. CSP requires a per-request nonce for all `<script>`s (`'strict-dynamic'`). `X-Frame-Options: DENY` blocks clickjacking. |
+| 11 | **CSV formula injection (CWE-1236)** | A teacher whose name starts with `=`, `+`, `-`, `@`, TAB, or CR triggers formula execution on the secretary's machine when she opens the export in Excel / Google Sheets / LibreOffice. | `lib/reports/csv.ts#escapeCell` prepends `'` to any cell starting with one of those characters before RFC 4180 quoting. Tested in `tests/unit/csv.test.ts`. |
 
 Out of scope: nation-state actors, supply-chain compromise of `next` itself,
 physical access to Supabase infra. We trust Vercel and Supabase. Compromise of
@@ -29,40 +30,67 @@ the deployment platform is treated as a total breach.
 
 ## 2. Security headers
 
-Configured in [`next.config.ts`](../next.config.ts). Applied to every
-response by Next's `headers()`.
+Two surfaces:
+
+1. **Static headers** in [`next.config.ts`](../next.config.ts) `headers()`
+   — applied to every response: `Strict-Transport-Security`,
+   `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`,
+   `Permissions-Policy`.
+2. **Per-request CSP** in [`middleware.ts`](../middleware.ts) +
+   [`lib/security/csp.ts`](../lib/security/csp.ts) — the CSP carries a
+   fresh nonce per response and is the only place CSP is set. Browsers
+   intersect multiple CSP headers, so emitting it twice (statically AND
+   from middleware) would defeat the nonce.
 
 | Header | Value | Rationale |
 |---|---|---|
 | `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | 2-year HSTS, subdomain included, preload-list eligible. |
-| `Content-Security-Policy` | `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` | No inline JS. Inline `<style>` is required by Next.js's chunked stylesheet runtime — we accept it and document the tradeoff. No remote XHR. Cannot be embedded in any frame. |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'nonce-<random>' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` | Per-request nonce. `'strict-dynamic'` extends trust from the nonced loader script to chunks it loads, so we don't enumerate chunk URLs. Inline `<style>` is required by Next.js's chunked stylesheet runtime — we accept it. No remote XHR. Cannot be framed. |
 | `X-Frame-Options` | `DENY` | Belt for `frame-ancestors 'none'`. |
 | `X-Content-Type-Options` | `nosniff` | Stops MIME-sniff-driven XSS on downloads. |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Outbound links don't leak path or query. |
 | `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | We don't use these powerful features and want browsers to enforce that. |
 
-Tested in `tests/unit/security-headers.test.ts`.
+### Why per-request CSP, not static `script-src 'self'`?
+
+Next.js App Router emits inline `<script>self.__next_f.push(…)</script>`
+tags for RSC streaming and hydration. Under `script-src 'self'` browsers
+refuse to execute them; the page loads chrome but never hydrates and
+forms / navigation are dead. The middleware generates a 128-bit base64
+nonce, sets it on the `x-nonce` request header (Next reads this and
+stamps `nonce="…"` onto every inline script), and includes it in the
+response CSP. Verified end-to-end against `pnpm start` (header nonce ==
+body nonce on every render) and tested at
+`tests/integration/middleware-routing.test.ts` and
+`tests/unit/security-headers.test.ts`.
 
 ## 3. Rate limits
 
 Implementation: `lib/rate-limit/*`, wired in `middleware.ts`.
 
-### Choice: in-memory fixed-window per process
+### Choice: in-memory fixed-window per worker
 
 MVP-acceptable rationale:
 
-1. The portal runs as a single Next.js process per deploy region. Vercel
-   serverless functions are warm-but-instance-isolated; a single user is
-   likely served by the same instance for a short window, which makes
-   per-instance limits good enough for typical brute-force and DoS
-   patterns we expect.
-2. We have ≲100 teachers and one secretary. There's no traffic profile that
-   would defeat a per-instance counter at our scale.
-3. Cross-instance rate limiting requires Redis / Upstash. Adding a
+1. The portal serves ≲100 teachers and one secretary. There's no
+   traffic profile that would defeat a per-worker counter at our scale.
+2. Cross-worker rate limiting requires Redis / Upstash. Adding a
    datastore dependency for our scale is over-engineering. When the user
-   count or traffic grows enough that per-instance limits are insufficient,
+   count or traffic grows enough that per-worker limits are insufficient,
    swap `lib/rate-limit/index.ts` for an Upstash-Redis client behind the
-   same `check()` signature.
+   same `check()` signature — one-file change.
+
+### Honest limits of the current design
+
+The limiter lives in-process. On Vercel's Edge runtime (where
+`middleware.ts` runs) each worker instance is short-lived: a cold start
+spins up a fresh worker with an empty counter Map. **Concretely this
+means a determined attacker can extend their effective budget by
+forcing cold-starts, and limits are not shared across regions.** For
+our threat model (slow-burn brute force from a small number of IPs
+against an audience of ≲100 known teachers) this is acceptable. It
+would not be acceptable for a public-signup app or anything customer-
+facing — file that under "swap to Upstash before scaling out".
 
 ### Limits
 
@@ -100,6 +128,15 @@ Enforcement:
      client-shipped chunks) → **fail**.
 
 Failing this check is a release blocker. CI runs it on every PR.
+
+### Defence in depth: refuse to silently pass
+
+`scripts/leakage-grep.mjs` **exits 1** when no `SUPABASE_SERVICE_ROLE_KEY`
+is available in env or `.env.*` files — a misconfigured CI job that
+forgets to set the env var cannot accidentally turn the literal-value
+sweep into a no-op. Pass `--skip-literal` to intentionally bypass the
+sweep on local runs where the developer hasn't configured Supabase. CI
+sets the env var, so the production gate runs every time.
 
 ## 5. Audit log
 

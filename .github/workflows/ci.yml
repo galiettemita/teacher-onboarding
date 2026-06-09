@@ -51,3 +51,10 @@ jobs:
         run: pnpm test:leakage
         env:
           SUPABASE_SERVICE_ROLE_KEY: ci-service-role-sentinel-never-leak-this
+
+      - name: CSP nonce smoke (proves /login would hydrate)
+        run: pnpm test:smoke
+        env:
+          AUTH_SECRET: ci-build-secret-not-for-runtime
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          CRON_SECRET: ci-cron-secret-not-for-runtime

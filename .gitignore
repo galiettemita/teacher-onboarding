@@ -34,3 +34,7 @@ pnpm-debug.log*
 
 # drizzle
 drizzle/meta/
+
+# Local-only agent reference material (not part of Phase 5 deliverables)
+docs/AGENT_PROMPTS.md
+REVIEWER_NOTES.md

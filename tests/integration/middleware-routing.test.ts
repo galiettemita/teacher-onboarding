@@ -117,3 +117,67 @@ describe("middleware: admin", () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe("middleware: CSP nonce wiring (the bug we shipped initially)", () => {
+  /**
+   * Under the original CSP (`script-src 'self'`) Next.js's inline RSC
+   * hydration scripts were blocked at runtime. Smoke-verified by
+   * curl + pnpm start (see commit history). These tests assert the
+   * wiring that prevents regression:
+   *
+   *   1. Every response middleware emits has a single CSP header.
+   *   2. The CSP contains a fresh nonce.
+   *   3. Two requests yield two different nonces.
+   *   4. The x-nonce request header is set so Next's renderer can
+   *      stamp it onto inline <script>s.
+   *   5. CSP includes 'strict-dynamic' so the nonced loader can fetch
+   *      its chunks.
+   */
+  it("attaches CSP with a nonce + 'strict-dynamic' on a passthrough", async () => {
+    injectedAuth = { user: { id: "a1", role: "admin" } };
+    const res = await callMiddleware("/api/admin/audit");
+    const csp = res.headers.get("content-security-policy") ?? "";
+    expect(csp).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
+    expect(csp).toContain("frame-ancestors 'none'");
+  });
+
+  it("attaches CSP on the public-path branch (anonymous /login)", async () => {
+    injectedAuth = null;
+    const res = await callMiddleware("/login");
+    const csp = res.headers.get("content-security-policy") ?? "";
+    expect(csp).toContain("nonce-");
+  });
+
+  it("attaches CSP on redirects (anonymous → /admin/dashboard)", async () => {
+    injectedAuth = null;
+    const res = await callMiddleware("/admin/dashboard");
+    expect(res.status).toBeGreaterThanOrEqual(300);
+    expect(res.status).toBeLessThan(400);
+    const csp = res.headers.get("content-security-policy") ?? "";
+    expect(csp).toContain("nonce-");
+  });
+
+  it("emits a fresh nonce per request", async () => {
+    injectedAuth = { user: { id: "a1", role: "admin" } };
+    const a = await callMiddleware("/api/admin/audit");
+    const b = await callMiddleware("/api/admin/audit");
+    const nonceA = /nonce-([A-Za-z0-9+/=]+)/.exec(a.headers.get("content-security-policy") ?? "")?.[1];
+    const nonceB = /nonce-([A-Za-z0-9+/=]+)/.exec(b.headers.get("content-security-policy") ?? "")?.[1];
+    expect(nonceA).toBeTruthy();
+    expect(nonceB).toBeTruthy();
+    expect(nonceA).not.toBe(nonceB);
+  });
+
+  it("sets exactly one CSP header (no static + dynamic double-up)", async () => {
+    injectedAuth = { user: { id: "a1", role: "admin" } };
+    const res = await callMiddleware("/api/admin/audit");
+    // Headers.get returns the single value or a comma-joined list of all
+    // values for the same key. Browsers AND multiple CSP headers; we
+    // need exactly one to keep the nonce effective.
+    const all: string[] = [];
+    res.headers.forEach((v, k) => {
+      if (k.toLowerCase() === "content-security-policy") all.push(v);
+    });
+    expect(all.length).toBe(1);
+  });
+});

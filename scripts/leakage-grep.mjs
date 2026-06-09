@@ -5,16 +5,23 @@
  * After `pnpm build` the production bundle is in `.next/`. None of these
  * artifacts may contain:
  *
- *   - the literal value of SUPABASE_SERVICE_ROLE_KEY from .env.test (if set)
+ *   - the literal value of SUPABASE_SERVICE_ROLE_KEY (from env or
+ *     .env.test / .env.local / .env)
  *   - the strings 'service_role', 'service-role', or
  *     'SUPABASE_SERVICE_ROLE_KEY' inside `.next/static/**` (client bundle)
  *
  * The check is mandatory and a release blocker. See docs/SECURITY.md §4.
  *
- * Exits 0 on success, 1 on any match.
+ * Exits 0 on success, 1 on any match. Also exits 1 if no literal value
+ * is available to test against — defence in depth against a
+ * misconfigured CI job silently passing. Pass `--skip-literal` to
+ * intentionally bypass the literal-value sweep (e.g. for local runs
+ * where the dev never set up Supabase).
  */
 import fs from "node:fs";
 import path from "node:path";
+
+const SKIP_LITERAL = process.argv.includes("--skip-literal");
 
 const ROOT = process.cwd();
 const NEXT_DIR = path.join(ROOT, ".next");
@@ -123,10 +130,24 @@ if (literalValue && literalValue.length >= 16) {
       );
     }
   }
-} else {
+} else if (SKIP_LITERAL) {
   console.warn(
-    "[leakage] SUPABASE_SERVICE_ROLE_KEY not set in env or .env.test — skipping literal-value sweep."
+    "[leakage] --skip-literal set — skipping literal-value sweep (sentinel-string sweep still ran)."
   );
+} else {
+  console.error(
+    "[leakage] FAIL: no SUPABASE_SERVICE_ROLE_KEY available in env or .env.* files."
+  );
+  console.error(
+    "  The literal-value sweep cannot run, so we cannot prove the key is not bundled."
+  );
+  console.error(
+    "  Either set SUPABASE_SERVICE_ROLE_KEY (CI must do this) or pass --skip-literal"
+  );
+  console.error(
+    "  to intentionally bypass the sweep (local-only)."
+  );
+  process.exit(1);
 }
 
 if (errors.length > 0) {
