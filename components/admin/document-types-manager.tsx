@@ -26,6 +26,90 @@ const EMPTY_DRAFT: DraftRow = {
   renewalMonths: 24,
 };
 
+function DraftRowEditor({
+  draft,
+  setDraft,
+  onSave,
+  onCancel,
+  saveLabel,
+  busy,
+}: {
+  draft: DraftRow;
+  setDraft: (d: DraftRow) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  saveLabel: string;
+  busy: boolean;
+}) {
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">Name</label>
+          <input
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">
+            Renewal (months, 0 = one-time)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={120}
+            value={draft.renewalMonths}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                renewalMonths: Number.parseInt(e.target.value || "0", 10),
+              })
+            }
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
+        <textarea
+          value={draft.description}
+          onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+          rows={2}
+          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+      <label className="flex items-center gap-2 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          checked={draft.required}
+          onChange={(e) => setDraft({ ...draft, required: e.target.checked })}
+        />
+        Required for completion
+      </label>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={busy || draft.name.trim().length === 0}
+          className="rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1.5 disabled:opacity-50"
+        >
+          {saveLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="rounded-md border border-slate-300 text-sm font-medium px-3 py-1.5 hover:bg-white"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -131,88 +215,6 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
     setError(null);
   }
 
-  function DraftRowEditor({
-    draft,
-    setDraft,
-    onSave,
-    onCancel,
-    saveLabel,
-  }: {
-    draft: DraftRow;
-    setDraft: (d: DraftRow) => void;
-    onSave: () => void;
-    onCancel: () => void;
-    saveLabel: string;
-  }) {
-    return (
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Name</label>
-            <input
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
-              Renewal (months, 0 = one-time)
-            </label>
-            <input
-              type="number"
-              min={0}
-              max={120}
-              value={draft.renewalMonths}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  renewalMonths: Number.parseInt(e.target.value || "0", 10),
-                })
-              }
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
-          <textarea
-            value={draft.description}
-            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-            rows={2}
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={draft.required}
-            onChange={(e) => setDraft({ ...draft, required: e.target.checked })}
-          />
-          Required for completion
-        </label>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={busy || draft.name.trim().length === 0}
-            className="rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1.5 disabled:opacity-50"
-          >
-            {saveLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={busy}
-            className="rounded-md border border-slate-300 text-sm font-medium px-3 py-1.5 hover:bg-white"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {error && (
@@ -228,6 +230,7 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
           onSave={submitCreate}
           onCancel={reset}
           saveLabel="Create"
+          busy={busy}
         />
       ) : (
         <button
@@ -273,6 +276,7 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
                           onSave={() => submitEdit(t.id)}
                           onCancel={reset}
                           saveLabel="Save"
+                          busy={busy}
                         />
                       </td>
                     </tr>
