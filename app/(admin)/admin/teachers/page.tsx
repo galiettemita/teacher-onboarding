@@ -6,6 +6,8 @@ import {
   type CompletionState,
 } from "@/lib/db/queries/admin-teachers";
 
+export const dynamic = "force-dynamic";
+
 function parseCompletionState(raw: string | undefined): CompletionState {
   return raw === "complete" || raw === "incomplete" ? raw : "all";
 }

@@ -8,6 +8,8 @@ import { getTeacherDetail } from "@/lib/db/queries/admin-teachers";
 import { deriveUiStatus } from "@/lib/expiry";
 import { NotFoundError } from "@/lib/errors";
 
+export const dynamic = "force-dynamic";
+
 function formatDate(d: Date | null | undefined): string {
   if (!d) return "—";
   return new Date(d).toLocaleDateString();
