@@ -2,13 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { sendEmail, HeaderInjectionError } from "@/lib/email/send";
 
 /**
- * Boundary tests for the dispatcher. Mocks `fetch` to assert the Resend
- * payload byte-for-byte; verifies fail-loud behaviour when
- * EMAIL_PROVIDER=resend and RESEND_API_KEY is missing.
+ * Boundary tests for the dispatcher. Mocks `fetch` to assert the provider
+ * payloads byte-for-byte; verifies fail-loud behaviour when provider API
+ * keys are missing.
  */
 
 const ORIG_PROVIDER = process.env.EMAIL_PROVIDER;
-const ORIG_KEY = process.env.RESEND_API_KEY;
+const ORIG_RESEND_KEY = process.env.RESEND_API_KEY;
+const ORIG_SENDGRID_KEY = process.env.SENDGRID_API_KEY;
 
 function validMessage() {
   return {
@@ -22,7 +23,8 @@ function validMessage() {
 
 afterEach(() => {
   process.env.EMAIL_PROVIDER = ORIG_PROVIDER;
-  process.env.RESEND_API_KEY = ORIG_KEY;
+  process.env.RESEND_API_KEY = ORIG_RESEND_KEY;
+  process.env.SENDGRID_API_KEY = ORIG_SENDGRID_KEY;
   vi.restoreAllMocks();
 });
 
@@ -132,6 +134,75 @@ describe("sendEmail — resend provider", () => {
   it("returns {ok: false, error} on network failure — does not throw", async () => {
     process.env.EMAIL_PROVIDER = "resend";
     process.env.RESEND_API_KEY = "sk-test-fake-1234567890";
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNRESET"));
+    const res = await sendEmail(validMessage());
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("ECONNRESET");
+  });
+});
+
+describe("sendEmail — sendgrid provider", () => {
+  it("FAIL-LOUD: throws when SENDGRID_API_KEY is missing", async () => {
+    process.env.EMAIL_PROVIDER = "sendgrid";
+    delete process.env.SENDGRID_API_KEY;
+    await expect(sendEmail(validMessage())).rejects.toThrow(/SENDGRID_API_KEY/);
+  });
+
+  it("POSTs to api.sendgrid.com with the expected JSON body", async () => {
+    process.env.EMAIL_PROVIDER = "sendgrid";
+    process.env.SENDGRID_API_KEY = "SG.test-fake-1234567890";
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(null, {
+          status: 202,
+          headers: { "x-message-id": "sg_msg_abc" },
+        })
+      );
+
+    const res = await sendEmail(validMessage());
+    expect(res).toEqual({ ok: true, providerId: "sg_msg_abc" });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(String(url)).toBe("https://api.sendgrid.com/v3/mail/send");
+    expect((init as RequestInit).method).toBe("POST");
+    const headers = (init as RequestInit).headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer SG.test-fake-1234567890");
+    expect(headers["Content-Type"]).toBe("application/json");
+    const body = JSON.parse(String((init as RequestInit).body));
+    expect(body).toEqual({
+      personalizations: [{ to: [{ email: "teacher@school.org" }] }],
+      from: { email: "noreply@school.org", name: "Onboarding Portal" },
+      subject: "Heads up",
+      content: [
+        { type: "text/plain", value: "Hello" },
+        { type: "text/html", value: "<p>Hello</p>" },
+      ],
+    });
+  });
+
+  it("returns {ok: false, error} on provider HTTP error — scrubs the key", async () => {
+    process.env.EMAIL_PROVIDER = "sendgrid";
+    process.env.SENDGRID_API_KEY = "SG.test-fake-1234567890";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          errors: [{ message: "Bad Authorization: Bearer SG.test-fake-1234567890" }],
+        }),
+        { status: 401 }
+      )
+    );
+    const res = await sendEmail(validMessage());
+    expect(res.ok).toBe(false);
+    expect(res.error).toBeDefined();
+    expect(res.error).not.toContain("SG.test-fake-1234567890");
+    expect(res.error).toContain("***");
+  });
+
+  it("returns {ok: false, error} on network failure — does not throw", async () => {
+    process.env.EMAIL_PROVIDER = "sendgrid";
+    process.env.SENDGRID_API_KEY = "SG.test-fake-1234567890";
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNRESET"));
     const res = await sendEmail(validMessage());
     expect(res.ok).toBe(false);

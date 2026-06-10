@@ -57,8 +57,9 @@ Variables*). Mark all of them **Encrypted** unless noted.
 | `CRON_SECRET` | yes | Long random string (≥32 bytes). Vercel Cron sends it as `Authorization: Bearer …`. |
 | `EXPIRING_SOON_WINDOW_DAYS` | no | Integer days (default `30`). |
 | `EMAIL_FROM`, `EMAIL_SERVER` | Auth.js | Used by Auth.js for magic links. Separate from the reminder dispatcher. |
-| `EMAIL_PROVIDER` | no | `console` (default, dev) or `resend` (production). Selects the reminder provider. |
+| `EMAIL_PROVIDER` | no | `console` (default, dev), `resend`, or `sendgrid`. Selects the outbound email provider for reminders and teacher invites. |
 | `RESEND_API_KEY` | when `EMAIL_PROVIDER=resend` | Server-only. **Never** prefix with `NEXT_PUBLIC_`. The build-time leakage check (`pnpm test:leakage`) catches accidental leaks into `.next/static/**`. |
+| `SENDGRID_API_KEY` | when `EMAIL_PROVIDER=sendgrid` | Server-only. **Never** prefix with `NEXT_PUBLIC_`. Use SendGrid Single Sender Verification if sending from a Gmail address. |
 
 ### Never log or echo these
 
@@ -133,11 +134,13 @@ Run through this list before flipping DNS. Every box must be checked.
 - [ ] **Cron**: `CRON_SECRET` set, `vercel.json` registers both
       `/api/cron/expiry` and `/api/cron/reminders`, manual `curl` to each
       endpoint with the secret returns 200.
-- [ ] **Email reminders**: `EMAIL_PROVIDER` set (`console` for staging,
-      `resend` for production). When `resend`: `RESEND_API_KEY` set as an
-      encrypted env var, sending domain verified at the provider,
-      `sender_email` in `reminder_settings` matches a verified address.
-      `pnpm test:leakage` runs in CI to confirm the key never appears in
+- [ ] **Email reminders/invites**: `EMAIL_PROVIDER` set (`console` for staging,
+      `resend` or `sendgrid` for production). When `resend`: `RESEND_API_KEY`
+      set as an encrypted env var and the sending domain is verified at the
+      provider. When `sendgrid`: `SENDGRID_API_KEY` set as an encrypted env var
+      and the sender email is verified in SendGrid. In either case,
+      `sender_email` in `reminder_settings` must match a verified sender.
+      `pnpm test:leakage` runs in CI to confirm provider keys never appear in
       `.next/static/**`.
 - [ ] **Headers**: `curl -I https://your-site/login` shows
       `Strict-Transport-Security`, `Content-Security-Policy`,

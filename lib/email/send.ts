@@ -12,6 +12,8 @@
  *                                       smoke script.
  *   EMAIL_PROVIDER=resend             — POSTs to Resend's REST API using
  *                                       RESEND_API_KEY. Server-only.
+ *   EMAIL_PROVIDER=sendgrid           — POSTs to SendGrid's Mail Send API
+ *                                       using SENDGRID_API_KEY. Server-only.
  *
  * Hard rules enforced here:
  *
@@ -20,19 +22,22 @@
  *    type level.
  *  - All fields pass through `lib/email/sanitize.ts` for header-injection
  *    defence before any provider call.
- *  - When EMAIL_PROVIDER=resend, RESEND_API_KEY MUST be set; we throw on
- *    first use if it's missing. No silent fallback to console — that's
- *    how production goes silent.
+ *  - When EMAIL_PROVIDER=resend or sendgrid, the matching API key MUST be
+ *    set; we throw on first use if it's missing. No silent fallback to
+ *    console — that's how production goes silent.
  *  - The `from` field is built server-side from `reminder_settings`, NOT
  *    accepted from the caller. The dispatcher takes a `from` field only
  *    because `reminder_settings` is the only thing that legitimately
  *    knows the verified sender for the deployment; the dispatcher then
  *    re-sanitises it.
  *
- * Cited platform doc:
+ * Cited platform docs:
  *   Resend Send API — https://resend.com/docs/api-reference/emails/send-email
  *   (uses Authorization: Bearer <RESEND_API_KEY>, JSON body, fields:
  *    from, to, subject, text, html)
+ *   SendGrid Mail Send API — https://www.twilio.com/docs/sendgrid/api-reference/mail-send/mail-send
+ *   (uses Authorization: Bearer <SENDGRID_API_KEY>, JSON body with
+ *    personalizations, from, subject, and content)
  */
 
 import {
@@ -78,17 +83,20 @@ export interface SendResult {
  * unrecognised is treated as a misconfiguration and we throw — silent
  * fall-through to console would be a production foot-gun.
  */
-export function readEmailProvider(): "console" | "resend" {
+export type EmailProvider = "console" | "resend" | "sendgrid";
+
+export function readEmailProvider(): EmailProvider {
   const raw = (process.env.EMAIL_PROVIDER ?? "console").trim().toLowerCase();
   if (raw === "console" || raw === "") return "console";
   if (raw === "resend") return "resend";
+  if (raw === "sendgrid") return "sendgrid";
   throw new Error(
-    `Unsupported EMAIL_PROVIDER='${raw}'. Set EMAIL_PROVIDER to 'console' or 'resend'.`
+    `Unsupported EMAIL_PROVIDER='${raw}'. Set EMAIL_PROVIDER to 'console', 'resend', or 'sendgrid'.`
   );
 }
 
 export function inviteEmailDeliveryEnabled(): boolean {
-  return readEmailProvider() === "resend";
+  return readEmailProvider() !== "console";
 }
 
 function readResendApiKey(): string {
@@ -99,6 +107,16 @@ function readResendApiKey(): string {
     // failure mode.
     throw new Error(
       "RESEND_API_KEY is not set but EMAIL_PROVIDER=resend. Refusing to send."
+    );
+  }
+  return key;
+}
+
+function readSendGridApiKey(): string {
+  const key = process.env.SENDGRID_API_KEY;
+  if (!key || key.trim().length === 0) {
+    throw new Error(
+      "SENDGRID_API_KEY is not set but EMAIL_PROVIDER=sendgrid. Refusing to send."
     );
   }
   return key;
@@ -193,9 +211,76 @@ async function sendViaResend(msg: EmailMessage): Promise<SendResult> {
 }
 
 /**
+ * SendGrid provider — POSTs to https://api.sendgrid.com/v3/mail/send.
+ * Doc: https://www.twilio.com/docs/sendgrid/api-reference/mail-send/mail-send
+ *
+ * SendGrid returns 202 Accepted with an empty body on success; the optional
+ * x-message-id response header is the best provider identifier we can persist.
+ */
+async function sendViaSendGrid(msg: EmailMessage): Promise<SendResult> {
+  const apiKey = readSendGridApiKey();
+
+  const content = [{ type: "text/plain", value: msg.text }];
+  if (msg.html) content.push({ type: "text/html", value: msg.html });
+
+  const body = JSON.stringify({
+    personalizations: [{ to: [{ email: msg.to }] }],
+    from: { email: msg.from.email, name: msg.from.name },
+    subject: msg.subject,
+    content,
+  });
+
+  let res: Response;
+  try {
+    res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: scrubError(err instanceof Error ? err.message : String(err), apiKey),
+    };
+  }
+
+  let parsed: unknown = null;
+  try {
+    parsed = await res.json();
+  } catch {
+    // SendGrid success responses usually have no JSON body.
+  }
+
+  if (res.ok) {
+    return { ok: true, providerId: res.headers.get("x-message-id") ?? undefined };
+  }
+
+  const providerMessage = parseSendGridError(parsed) ?? `HTTP ${res.status}`;
+  return {
+    ok: false,
+    error: scrubError(providerMessage, apiKey),
+  };
+}
+
+function parseSendGridError(parsed: unknown): string | null {
+  if (!parsed || typeof parsed !== "object" || !("errors" in parsed)) return null;
+  const errors = (parsed as { errors: unknown }).errors;
+  if (!Array.isArray(errors)) return null;
+  const messages = errors
+    .map((err) => {
+      if (!err || typeof err !== "object" || !("message" in err)) return null;
+      return String((err as { message: unknown }).message);
+    })
+    .filter((message): message is string => Boolean(message));
+  return messages.length > 0 ? messages.join("; ") : null;
+}
+
+/**
  * Defensive scrubber for anything we surface in `failed_reason`. Kills
- * any echo of the API key (paranoia — Resend doesn't echo it, but our
- * own code might) and truncates.
+ * any echo of the API key and truncates.
  */
 function scrubError(raw: string, apiKey: string): string {
   let s = raw;
@@ -236,6 +321,7 @@ export async function sendEmail(msg: EmailMessage): Promise<SendResult> {
 
   const provider = readEmailProvider();
   if (provider === "console") return sendViaConsole(safe);
+  if (provider === "sendgrid") return sendViaSendGrid(safe);
   return sendViaResend(safe);
 }
 

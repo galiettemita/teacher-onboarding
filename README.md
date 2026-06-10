@@ -96,6 +96,8 @@ Change these immediately in any shared environment.
 | `LOCAL_STORAGE_DIR` | Local file directory (default `./.uploads`). |
 | `CRON_SECRET` | Shared secret for `/api/cron/expiry`. |
 | `EXPIRING_SOON_WINDOW_DAYS` | Optional. Integer days (default 30). |
+| `EMAIL_PROVIDER` | Optional. `console` (default), `resend`, or `sendgrid` for automatic emails. |
+| `RESEND_API_KEY` / `SENDGRID_API_KEY` | Required only when using that email provider. Server-only; never `NEXT_PUBLIC_`. |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Used by `pnpm db:seed`. |
 
 Full list, including production-only Supabase vars, lives in
