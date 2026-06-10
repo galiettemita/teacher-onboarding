@@ -40,8 +40,9 @@ export default async function AdminRemindersPage() {
               </span>
             </div>
             <p className="text-slate-600 mt-2 max-w-2xl">
-              Automated emails remind teachers about missing, rejected, expiring,
-              and expired documents. Every attempt is logged.
+              Set up automatic reminder emails for teachers who still need to
+              upload, replace, or renew documents. You can also send one reminder
+              yourself anytime.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -49,71 +50,79 @@ export default async function AdminRemindersPage() {
               href="/admin/reminders/preview"
               className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Preview emails
+See email examples
             </Link>
             <Link
               href="/admin/reminders/settings"
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
             >
-              Edit settings
+Set up reminders
             </Link>
           </div>
         </header>
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="rounded-lg border border-slate-200 p-5 bg-white">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Step 1
+        <section className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4 mb-8">
+          <Link
+            href="/admin/reminders/settings"
+            className="rounded-lg border border-blue-200 bg-blue-50 p-6 hover:bg-blue-100"
+          >
+            <div className="text-xs font-medium uppercase tracking-wide text-blue-700">
+              Main setup
             </div>
-            <h2 className="font-medium text-slate-900 mt-1 mb-1">Configure</h2>
-            <p className="text-sm text-slate-600">
-              Set sender, portal URL, reminder days, and the daily cap.
+            <h2 className="text-lg font-semibold text-blue-950 mt-1 mb-2">
+              Send automatic reminders to all teachers
+            </h2>
+            <p className="text-sm text-blue-900">
+              Turn reminders on, choose when they repeat, and let the system send
+              the right email to every teacher who needs one.
             </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 p-5 bg-white">
+          </Link>
+
+          <div className="rounded-lg border border-slate-200 p-6 bg-white">
             <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Step 2
+              How it works
             </div>
-            <h2 className="font-medium text-slate-900 mt-1 mb-1">Cron sends</h2>
-            <p className="text-sm text-slate-600">
-              The scheduled job finds eligible teachers and sends the right template.
-            </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 p-5 bg-white">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Step 3
-            </div>
-            <h2 className="font-medium text-slate-900 mt-1 mb-1">Monitor</h2>
-            <p className="text-sm text-slate-600">
-              Check runs and send logs when someone asks what went out.
-            </p>
+            <ol className="mt-2 space-y-2 text-sm text-slate-700 list-decimal list-inside">
+              <li>Teachers upload their documents.</li>
+              <li>The system checks who is missing, rejected, or expiring.</li>
+              <li>Reminder emails keep going out on your schedule.</li>
+            </ol>
           </div>
         </section>
 
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <Link
             href="/admin/reminders/manual"
-            className="rounded-lg border border-blue-200 bg-blue-50 p-5 hover:bg-blue-100"
+            className="rounded-lg border border-slate-200 p-5 hover:bg-slate-50"
           >
-            <h2 className="font-medium text-blue-950 mb-1">Send one manually</h2>
-            <p className="text-sm text-blue-900">
-              Choose a teacher, load their documents, and send a one-off reminder.
+            <h2 className="font-medium text-slate-900 mb-1">Send one reminder now</h2>
+            <p className="text-sm text-slate-600">
+              Pick one teacher, choose the email type, and send it right away.
+            </p>
+          </Link>
+          <Link
+            href="/admin/reminders/preview"
+            className="rounded-lg border border-slate-200 p-5 hover:bg-slate-50"
+          >
+            <h2 className="font-medium text-slate-900 mb-1">See email examples</h2>
+            <p className="text-sm text-slate-600">
+              Check what teachers will receive before reminders are sent.
             </p>
           </Link>
           <Link
             href="/admin/reminders/logs"
             className="rounded-lg border border-slate-200 p-5 hover:bg-slate-50"
           >
-            <h2 className="font-medium text-slate-900 mb-1">Open send log</h2>
+            <h2 className="font-medium text-slate-900 mb-1">View email history</h2>
             <p className="text-sm text-slate-600">
-              Review each attempted send, including skipped and failed reminders.
+              See what was sent and why any reminder did not go out.
             </p>
           </Link>
         </section>
 
         <section className="rounded-lg border border-slate-200 p-5">
           <div className="flex items-baseline justify-between mb-3">
-            <h2 className="font-medium text-slate-900">Recent cron runs</h2>
+            <h2 className="font-medium text-slate-900">Recent automatic checks</h2>
             <Link
               href="/admin/reminders/job-runs"
               className="text-sm text-blue-600 hover:underline"
@@ -122,7 +131,7 @@ export default async function AdminRemindersPage() {
             </Link>
           </div>
           {recentRuns.length === 0 ? (
-            <p className="text-sm text-slate-500">No runs yet.</p>
+            <p className="text-sm text-slate-500">No automatic checks have run yet.</p>
           ) : (
             <table className="w-full text-sm">
               <thead className="text-left text-slate-500">

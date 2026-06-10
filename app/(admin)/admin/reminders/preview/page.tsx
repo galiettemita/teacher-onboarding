@@ -20,12 +20,11 @@ export default async function AdminRemindersPreviewPage() {
           ← Back to reminders
         </Link>
         <h1 className="text-2xl font-semibold text-slate-900 mt-3 mb-2">
-          Template preview
+          Email examples
         </h1>
         <p className="text-slate-600 mb-6">
-          Each reminder type rendered against a sample teacher named &quot;Pat&quot;
-          and a sample document called &quot;Teaching Credential&quot;. No emails
-          are sent.
+          See the reminder emails teachers may receive. These examples use a
+          sample teacher named &quot;Pat&quot;. No emails are sent from this page.
         </p>
 
         <div className="space-y-6">
@@ -46,7 +45,7 @@ export default async function AdminRemindersPreviewPage() {
               </div>
               <div className="px-4 py-3 border-b border-slate-200">
                 <div className="text-xs text-slate-500 mb-1">
-                  Plain text body
+                  Email message
                 </div>
                 <pre className="text-sm text-slate-800 whitespace-pre-wrap font-sans">
                   {p.rendered.text}
@@ -54,7 +53,7 @@ export default async function AdminRemindersPreviewPage() {
               </div>
               <details className="px-4 py-3">
                 <summary className="text-xs text-slate-500 cursor-pointer">
-                  HTML body (source)
+                  Technical email version
                 </summary>
                 <pre className="text-xs text-slate-700 whitespace-pre-wrap mt-2 font-mono">
                   {p.rendered.html}

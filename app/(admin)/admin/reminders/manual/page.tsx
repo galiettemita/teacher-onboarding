@@ -147,11 +147,11 @@ export default async function AdminRemindersManualPage({
           ← Back to reminders
         </Link>
         <h1 className="text-2xl font-semibold text-slate-900 mt-3 mb-2">
-          Send a reminder manually
+          Send one reminder now
         </h1>
         <p className="text-slate-600 mb-6">
-          Choose the teacher first. Then pick the reminder and the exact document
-          from that teacher&apos;s current uploads. No copying database IDs.
+          Use this when you want to send a reminder to one teacher right away.
+          Pick the teacher, choose what the email is about, then send.
         </p>
 
         {params.sent ? (
@@ -167,7 +167,7 @@ export default async function AdminRemindersManualPage({
 
         <form method="get" className="mb-6 rounded-lg border border-slate-200 p-5">
           <label className="block text-sm font-medium text-slate-700 mb-1">
-            1. Choose teacher
+            1. Who should get the email?
           </label>
           <div className="flex flex-col sm:flex-row gap-3">
             <select
@@ -187,7 +187,7 @@ export default async function AdminRemindersManualPage({
               type="submit"
               className="rounded-md border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-50"
             >
-              Load teacher
+              Continue
             </button>
           </div>
         </form>
@@ -198,7 +198,7 @@ export default async function AdminRemindersManualPage({
 
             <section className="rounded-lg border border-slate-200 p-5 bg-slate-50">
               <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Recipient
+                Email will be sent to
               </div>
               <div className="mt-1 font-medium text-slate-900">{selectedTeacher.name}</div>
               <div className="text-sm text-slate-600">{selectedTeacher.email}</div>
@@ -206,7 +206,7 @@ export default async function AdminRemindersManualPage({
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                2. Reminder type
+                2. What kind of reminder is this?
               </label>
               <select
                 name="reminderType"
@@ -214,7 +214,7 @@ export default async function AdminRemindersManualPage({
                 defaultValue={params.reminderType ?? ""}
                 className="w-full rounded-md border border-slate-300 px-3 py-2"
               >
-                <option value="">— Choose a reminder type —</option>
+                <option value="">— Choose what this email is about —</option>
                 {REMINDER_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>
                     {t.label}
@@ -225,17 +225,17 @@ export default async function AdminRemindersManualPage({
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                3a. Document for rejected, expiring, or expired reminders
+                3a. If this is about an uploaded document, choose it here
               </label>
               <select
                 name="teacherDocumentId"
                 defaultValue={params.teacherDocumentId ?? ""}
                 className="w-full rounded-md border border-slate-300 px-3 py-2"
               >
-                <option value="">— Choose one of {selectedTeacher.name}&apos;s documents —</option>
+                <option value="">— Choose a document, if needed —</option>
                 {selectedDocs.length === 0 ? (
                   <option value="" disabled>
-                    No current documents for this teacher
+                    This teacher has no uploaded documents yet
                   </option>
                 ) : null}
                 {selectedDocs.map((d) => (
@@ -245,20 +245,20 @@ export default async function AdminRemindersManualPage({
                 ))}
               </select>
               <p className="text-xs text-slate-500 mt-1">
-                Use this for every reminder except “Missing required document.”
+                Skip this if you are reminding them to upload something missing.
               </p>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                3b. Missing document type
+                3b. If something is missing, choose what they need to upload
               </label>
               <select
                 name="documentTypeId"
                 defaultValue={params.documentTypeId ?? ""}
                 className="w-full rounded-md border border-slate-300 px-3 py-2"
               >
-                <option value="">— Choose the missing document type —</option>
+                <option value="">— Choose what is missing, if needed —</option>
                 {docTypes.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
@@ -266,13 +266,13 @@ export default async function AdminRemindersManualPage({
                 ))}
               </select>
               <p className="text-xs text-slate-500 mt-1">
-                Only needed when the reminder type is “Missing required document.”
+                Only use this when the email is asking for a missing document.
               </p>
             </div>
 
             <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
-              Manual sends bypass the daily cap. The recipient email still comes
-              from the teacher account, not from this form.
+              This sends even if the teacher already received another reminder
+              today. The email address comes from the teacher&apos;s account.
             </div>
 
             <div className="flex justify-end">
@@ -286,7 +286,7 @@ export default async function AdminRemindersManualPage({
           </form>
         ) : (
           <section className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-slate-600">
-            Choose a teacher to load their current documents and send options.
+            Choose a teacher first. Then you can pick the email type and send the reminder.
           </section>
         )}
       </main>

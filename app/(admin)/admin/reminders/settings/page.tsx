@@ -98,9 +98,13 @@ export default async function AdminRemindersSettingsPage({
         >
           ← Back to reminders
         </Link>
-        <h1 className="text-2xl font-semibold text-slate-900 mt-3 mb-6">
-          Reminder settings
+        <h1 className="text-2xl font-semibold text-slate-900 mt-3 mb-2">
+          Set up email reminders
         </h1>
+        <p className="text-slate-600 mb-6">
+          Set this once. The system will keep checking all teachers and send
+          reminder emails until their documents are complete.
+        </p>
 
         {params.saved ? (
           <div className="mb-4 rounded-md bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-800">
@@ -116,7 +120,7 @@ export default async function AdminRemindersSettingsPage({
         <form action={save} className="space-y-5">
           <fieldset className="rounded-lg border border-slate-200 p-5">
             <legend className="px-2 text-sm font-medium text-slate-700">
-              Master switch
+              Turn reminders on or off
             </legend>
             <label className="flex items-center gap-3 mt-2">
               <input
@@ -126,19 +130,18 @@ export default async function AdminRemindersSettingsPage({
                 className="h-4 w-4"
               />
               <span className="text-slate-900">
-                Reminders enabled — automated emails will be sent on the cron
-                schedule.
+                Automatically send reminders to all teachers who need them
               </span>
             </label>
           </fieldset>
 
           <fieldset className="rounded-lg border border-slate-200 p-5 space-y-4">
             <legend className="px-2 text-sm font-medium text-slate-700">
-              Sender
+              What teachers see
             </legend>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Sender name (From header display)
+                Sender name
               </label>
               <input
                 name="senderName"
@@ -150,7 +153,7 @@ export default async function AdminRemindersSettingsPage({
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Sender email (must be verified at your email provider)
+                Sender email address
               </label>
               <input
                 name="senderEmail"
@@ -163,7 +166,7 @@ export default async function AdminRemindersSettingsPage({
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Portal URL (single CTA in every email)
+                Link teachers should click
               </label>
               <input
                 name="portalUrl"
@@ -178,11 +181,11 @@ export default async function AdminRemindersSettingsPage({
 
           <fieldset className="rounded-lg border border-slate-200 p-5 space-y-4">
             <legend className="px-2 text-sm font-medium text-slate-700">
-              Cadence
+              When reminders are sent
             </legend>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Expiring milestones (comma-separated days before expiry)
+                Remind before a document expires
               </label>
               <input
                 name="reminderDaysBeforeExpiration"
@@ -191,14 +194,14 @@ export default async function AdminRemindersSettingsPage({
                 className="w-full rounded-md border border-slate-300 px-3 py-2"
               />
               <p className="text-xs text-slate-500 mt-1">
-                Default: 90, 60, 30, 14, 7. Only the canonical milestones have
-                templates; other values are ignored.
+                Example: 90, 60, 30, 14, 7 means teachers get reminders at
+                each of those points before expiration.
               </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Missing reminder cadence (days)
+                  Missing documents: repeat every this many days
                 </label>
                 <input
                   type="number"
@@ -212,7 +215,7 @@ export default async function AdminRemindersSettingsPage({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Rejected reminder cadence (days)
+                  Rejected documents: repeat every this many days
                 </label>
                 <input
                   type="number"
@@ -226,7 +229,7 @@ export default async function AdminRemindersSettingsPage({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Post-expiration cadence (days)
+                  Expired documents: repeat every this many days
                 </label>
                 <input
                   type="number"
@@ -247,13 +250,13 @@ export default async function AdminRemindersSettingsPage({
                 className="h-4 w-4"
               />
               <span className="text-slate-900">
-                Limit to one reminder per teacher per day (recommended)
+                Send at most one reminder to each teacher per day (recommended)
               </span>
             </label>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Admin alert: notify when a document has been pending this long
-                (days, leave blank to disable)
+                Tell admins when a document has been waiting for review this
+                many days (leave blank to turn off)
               </label>
               <input
                 type="number"
