@@ -3,7 +3,13 @@ import { signOut } from "@/lib/auth/config";
 
 interface AdminNavProps {
   email: string;
-  active?: "dashboard" | "teachers" | "doc-types" | "reports" | "audit";
+  active?:
+    | "dashboard"
+    | "teachers"
+    | "doc-types"
+    | "reports"
+    | "audit"
+    | "reminders";
 }
 
 const NAV_ITEMS = [
@@ -11,6 +17,7 @@ const NAV_ITEMS = [
   { key: "teachers" as const, href: "/admin/teachers", label: "Teachers" },
   { key: "doc-types" as const, href: "/admin/document-types", label: "Document types" },
   { key: "reports" as const, href: "/admin/reports", label: "Reports" },
+  { key: "reminders" as const, href: "/admin/reminders", label: "Reminders" },
   { key: "audit" as const, href: "/admin/audit", label: "Audit" },
 ];
 

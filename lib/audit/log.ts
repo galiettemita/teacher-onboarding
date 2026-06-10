@@ -26,14 +26,22 @@ export type AuditAction =
   | "user.invite"
   | "file.download"
   | "file.missing"
-  | "report.export";
+  | "report.export"
+  // Phase 6 — automated email reminders (§11.5 last paragraph).
+  // Every admin mutation on reminders writes one of these.
+  | "reminders.settings.update"
+  | "reminders.toggle"
+  | "reminders.manual_send";
 
 export type AuditTargetType =
   | "document"
   | "doc_type"
   | "user"
   | "file"
-  | "teacher_document";
+  | "teacher_document"
+  // Phase 6 audit targets.
+  | "reminder_settings"
+  | "notification_log";
 
 export interface AuditLogInput {
   actorId: string | null;
