@@ -27,6 +27,11 @@ response, [`docs/SECURITY.md`](./docs/SECURITY.md).
   renewal_months`. A daily cron sweeps past-due `approved` docs to
   `expired`. A new upload after expiry creates a fresh row and links the
   old one via `superseded_by`.
+- **Automated email reminders**: a second daily cron sends privacy-safe
+  reminders to teachers about missing, rejected, expiring (90/60/30/14/7
+  days out), and expired documents. UNIQUE-index idempotency, daily
+  per-teacher cap, master on/off toggle, full admin UI under
+  `/admin/reminders` (settings, logs, preview, manual send).
 - **Security**: rate limits on `/api/auth/**`, `/api/upload`, `/api/files/**`;
   HSTS / CSP / X-Frame-Options / no-sniff / Referrer-Policy /
   Permissions-Policy on every response; every admin mutation and file

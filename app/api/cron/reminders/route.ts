@@ -57,7 +57,23 @@ async function handle(req: Request): Promise<Response> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const jobRunId = await startJobRun({ jobName: REMINDER_JOB_NAME });
+  // Even the initial startJobRun can throw if the DB is unreachable.
+  // We surface a clean JSON 500 instead of leaking the Next.js default
+  // error page (which is empty + chunked + confusing to operators).
+  let jobRunId: string;
+  try {
+    jobRunId = await startJobRun({ jobName: REMINDER_JOB_NAME });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      {
+        ok: false,
+        jobRunId: null,
+        error: "Could not start job run: " + message.slice(0, 200),
+      },
+      { status: 500 }
+    );
+  }
 
   try {
     const counts = await runOnce(new Date());

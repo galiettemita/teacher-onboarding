@@ -56,7 +56,9 @@ Variables*). Mark all of them **Encrypted** unless noted.
 | `SUPABASE_BUCKET` | yes | Bucket name (`teacher-onboarding-private` by default). |
 | `CRON_SECRET` | yes | Long random string (≥32 bytes). Vercel Cron sends it as `Authorization: Bearer …`. |
 | `EXPIRING_SOON_WINDOW_DAYS` | no | Integer days (default `30`). |
-| `EMAIL_FROM`, `EMAIL_SERVER` | Phase 6 | Reserved for the email worker. |
+| `EMAIL_FROM`, `EMAIL_SERVER` | Auth.js | Used by Auth.js for magic links. Separate from the reminder dispatcher. |
+| `EMAIL_PROVIDER` | no | `console` (default, dev) or `resend` (production). Selects the reminder provider. |
+| `RESEND_API_KEY` | when `EMAIL_PROVIDER=resend` | Server-only. **Never** prefix with `NEXT_PUBLIC_`. The build-time leakage check (`pnpm test:leakage`) catches accidental leaks into `.next/static/**`. |
 
 ### Never log or echo these
 
@@ -67,8 +69,12 @@ embedding of the service-role key in the client bundle. See
 
 ## 3. Cron configuration
 
-The expiry sweep runs daily. The route is `GET /api/cron/expiry` with
-`Authorization: Bearer ${CRON_SECRET}`.
+Two cron jobs run daily, both invoked by Vercel Cron with HTTP GET and
+`Authorization: Bearer ${CRON_SECRET}` (see
+[the Vercel docs](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs)).
+The reminder dispatch runs 30 min after the expiry sweep so the sweep
+has time to flip past-due `approved` rows to `expired` before the
+dispatch decides who gets an "expired today" reminder.
 
 ### Vercel Cron
 
@@ -77,7 +83,8 @@ The expiry sweep runs daily. The route is `GET /api/cron/expiry` with
 ```json
 {
   "crons": [
-    { "path": "/api/cron/expiry", "schedule": "0 5 * * *" }
+    { "path": "/api/cron/expiry",    "schedule": "0 7 * * *" },
+    { "path": "/api/cron/reminders", "schedule": "30 7 * * *" }
   ]
 }
 ```
@@ -91,9 +98,28 @@ automatically when `CRON_SECRET` is set as an environment variable.
 curl -fsS -X GET \
   -H "Authorization: Bearer $CRON_SECRET" \
   "https://onboarding.school.org/api/cron/expiry"
+
+curl -fsS -X GET \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  "https://onboarding.school.org/api/cron/reminders"
 ```
 
-The route is idempotent — re-runs on the same day are zero-state-change.
+Both routes are idempotent — re-runs in the same day produce zero new
+state changes. The reminder route relies on the
+`notification_logs (teacher_id, milestone_key)` UNIQUE index, so even
+concurrent invocations are safe.
+
+### Local smoke test of the cron contract
+
+```bash
+pnpm build
+pnpm test:smoke:reminders
+```
+
+This boots `next start` and exercises `/api/cron/reminders` with the
+exact Vercel contract (GET + `Authorization: Bearer …`). Catches
+regressions where the route would be POST-only or expect a custom
+header — which would make it uncallable in production.
 
 ## 4. Deploy checklist
 
@@ -104,9 +130,15 @@ Run through this list before flipping DNS. Every box must be checked.
       env, app boots with `STORAGE_ADAPTER=supabase`.
 - [ ] **Auth**: `AUTH_SECRET` set, login works, session cookie is `HttpOnly`,
       `Secure`, `SameSite=Lax`.
-- [ ] **Cron**: `CRON_SECRET` set, `vercel.json` registered or external
-      scheduler configured, a manual `curl` to the endpoint with the secret
-      returns `{"expired": …}`.
+- [ ] **Cron**: `CRON_SECRET` set, `vercel.json` registers both
+      `/api/cron/expiry` and `/api/cron/reminders`, manual `curl` to each
+      endpoint with the secret returns 200.
+- [ ] **Email reminders**: `EMAIL_PROVIDER` set (`console` for staging,
+      `resend` for production). When `resend`: `RESEND_API_KEY` set as an
+      encrypted env var, sending domain verified at the provider,
+      `sender_email` in `reminder_settings` matches a verified address.
+      `pnpm test:leakage` runs in CI to confirm the key never appears in
+      `.next/static/**`.
 - [ ] **Headers**: `curl -I https://your-site/login` shows
       `Strict-Transport-Security`, `Content-Security-Policy`,
       `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,

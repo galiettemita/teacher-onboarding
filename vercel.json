@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/expiry",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/reminders",
+      "schedule": "30 7 * * *"
     }
   ]
 }
