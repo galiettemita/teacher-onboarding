@@ -25,6 +25,7 @@ export interface StorageAdapter {
 }
 
 import { LocalStorageAdapter } from "./local";
+import { SupabaseStorageAdapter } from "./supabase";
 
 let _instance: StorageAdapter | null = null;
 
@@ -36,7 +37,9 @@ export function getStorage(): StorageAdapter {
     case "local":
       _instance = new LocalStorageAdapter(process.env.LOCAL_STORAGE_DIR ?? "./.uploads");
       return _instance;
-    // case "supabase": _instance = new SupabaseStorageAdapter(...); return _instance;
+    case "supabase":
+      _instance = new SupabaseStorageAdapter();
+      return _instance;
     default:
       throw new Error(`Unknown STORAGE_ADAPTER: ${which}`);
   }

@@ -23,6 +23,7 @@ in [`DEPLOY.md`](./DEPLOY.md).
 | 9 | Audit log | Tampering / silent failure | Single chokepoint writer (`lib/audit/log.ts`). Never throws to caller. Read-only access via admin-only viewer. |
 | 10 | Cookies & XSS | Session theft | `HttpOnly`, `Secure`, `SameSite=Lax`. CSP requires a per-request nonce for all `<script>`s (`'strict-dynamic'`). `X-Frame-Options: DENY` blocks clickjacking. |
 | 11 | **CSV formula injection (CWE-1236)** | A teacher whose name starts with `=`, `+`, `-`, `@`, TAB, or CR triggers formula execution on the secretary's machine when she opens the export in Excel / Google Sheets / LibreOffice. | `lib/reports/csv.ts#escapeCell` prepends `'` to any cell starting with one of those characters before RFC 4180 quoting. Tested in `tests/unit/csv.test.ts`. |
+| 12 | **Storage credential leakage to client bundle** | A change accidentally references `SUPABASE_SERVICE_ROLE_KEY` from a client component. The leakage check would catch the literal value at build time. | `scripts/leakage-grep.mjs` runs on every CI build; fails the build if any sentinel string or literal env value is found in `.next/static/**`. Adapter constructed lazily server-side only (`lib/storage/index.ts` is imported only from route handlers). |
 
 Out of scope: nation-state actors, supply-chain compromise of `next` itself,
 physical access to Supabase infra. We trust Vercel and Supabase. Compromise of

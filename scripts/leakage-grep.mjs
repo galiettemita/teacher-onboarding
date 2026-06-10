@@ -80,6 +80,8 @@ const SENTINEL_STRINGS = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "service_role",
   "service-role",
+  // Supabase env var names that must never appear in the client bundle
+  "SUPABASE_BUCKET",
 ];
 
 const STATIC_FILES = walk(STATIC_DIR);
@@ -115,6 +117,15 @@ for (const p of envCandidates) {
   if (env.SUPABASE_SERVICE_ROLE_KEY) literalValue = env.SUPABASE_SERVICE_ROLE_KEY;
 }
 
+// Also resolve SUPABASE_URL literal for defence-in-depth (not a secret on its
+// own, but if it leaks alongside the service-role key it narrows the attack).
+let supabaseUrlLiteral = process.env.SUPABASE_URL;
+for (const p of envCandidates) {
+  if (supabaseUrlLiteral) break;
+  const env = loadDotEnv(p);
+  if (env.SUPABASE_URL) supabaseUrlLiteral = env.SUPABASE_URL;
+}
+
 if (literalValue && literalValue.length >= 16) {
   const ALL_FILES = walk(NEXT_DIR);
   for (const file of ALL_FILES) {
@@ -129,11 +140,38 @@ if (literalValue && literalValue.length >= 16) {
         `Found literal SUPABASE_SERVICE_ROLE_KEY value in ${path.relative(ROOT, file)}`
       );
     }
+    // Defence-in-depth: also check for SUPABASE_URL literal in client bundle.
+    if (
+      supabaseUrlLiteral &&
+      supabaseUrlLiteral.length >= 10 &&
+      file.startsWith(STATIC_DIR) &&
+      content.includes(supabaseUrlLiteral)
+    ) {
+      errors.push(
+        `Found literal SUPABASE_URL value in ${path.relative(ROOT, file)}`
+      );
+    }
   }
 } else if (SKIP_LITERAL) {
   console.warn(
     "[leakage] --skip-literal set — skipping literal-value sweep (sentinel-string sweep still ran)."
   );
+  // Still check SUPABASE_URL in static if available (even with --skip-literal)
+  if (supabaseUrlLiteral && supabaseUrlLiteral.length >= 10) {
+    for (const file of STATIC_FILES) {
+      let content;
+      try {
+        content = fs.readFileSync(file, "utf8");
+      } catch {
+        continue;
+      }
+      if (content.includes(supabaseUrlLiteral)) {
+        errors.push(
+          `Found literal SUPABASE_URL value in ${path.relative(ROOT, file)}`
+        );
+      }
+    }
+  }
 } else {
   console.error(
     "[leakage] FAIL: no SUPABASE_SERVICE_ROLE_KEY available in env or .env.* files."
