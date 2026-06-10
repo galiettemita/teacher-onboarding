@@ -52,20 +52,10 @@ export default async function AdminRemindersPage() {
           </Link>
         </header>
 
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <Link
-            href="/admin/reminders/settings"
-            className="rounded-lg border border-blue-200 bg-blue-50 p-6 hover:bg-blue-100"
-          >
-            <h2 className="text-lg font-semibold text-blue-950 mb-2">Settings</h2>
-            <p className="text-sm text-blue-900">
-              Update the sender name, sender email, teacher portal link, and
-              reminder schedule.
-            </p>
-          </Link>
+        <section className="mb-6">
           <Link
             href="/admin/reminders/logs"
-            className="rounded-lg border border-blue-200 bg-blue-50 p-6 hover:bg-blue-100"
+            className="block rounded-lg border border-blue-200 bg-blue-50 p-6 hover:bg-blue-100"
           >
             <h2 className="text-lg font-semibold text-blue-950 mb-2">Email history</h2>
             <p className="text-sm text-blue-900">
