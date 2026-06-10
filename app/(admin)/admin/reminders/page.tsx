@@ -22,63 +22,91 @@ export default async function AdminRemindersPage() {
     <>
       <AdminNav email={user.email} active="reminders" />
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <header className="flex items-baseline justify-between mb-6">
-          <h1 className="text-2xl font-semibold text-slate-900">
-            Reminder emails
-          </h1>
-          <span
-            className={
-              "rounded-full px-3 py-1 text-sm font-medium " +
-              (settings.enabled
-                ? "bg-green-100 text-green-800"
-                : "bg-amber-100 text-amber-800")
-            }
-          >
-            {settings.enabled ? "Reminders ON" : "Reminders OFF"}
-          </span>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-semibold text-slate-900">
+                Reminder emails
+              </h1>
+              <span
+                className={
+                  "rounded-full px-3 py-1 text-sm font-medium " +
+                  (settings.enabled
+                    ? "bg-green-100 text-green-800"
+                    : "bg-amber-100 text-amber-800")
+                }
+              >
+                {settings.enabled ? "ON" : "OFF"}
+              </span>
+            </div>
+            <p className="text-slate-600 mt-2 max-w-2xl">
+              Automated emails remind teachers about missing, rejected, expiring,
+              and expired documents. Every attempt is logged.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/reminders/preview"
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Preview emails
+            </Link>
+            <Link
+              href="/admin/reminders/settings"
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Edit settings
+            </Link>
+          </div>
         </header>
 
-        <p className="text-slate-600 mb-8">
-          The portal sends scheduled email reminders to teachers about missing,
-          rejected, expiring, and expired documents. Sends are logged so you can
-          see what went out, what was skipped, and what failed.
-        </p>
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="rounded-lg border border-slate-200 p-5 bg-white">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Step 1
+            </div>
+            <h2 className="font-medium text-slate-900 mt-1 mb-1">Configure</h2>
+            <p className="text-sm text-slate-600">
+              Set sender, portal URL, reminder days, and the daily cap.
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 p-5 bg-white">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Step 2
+            </div>
+            <h2 className="font-medium text-slate-900 mt-1 mb-1">Cron sends</h2>
+            <p className="text-sm text-slate-600">
+              The scheduled job finds eligible teachers and sends the right template.
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 p-5 bg-white">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Step 3
+            </div>
+            <h2 className="font-medium text-slate-900 mt-1 mb-1">Monitor</h2>
+            <p className="text-sm text-slate-600">
+              Check runs and send logs when someone asks what went out.
+            </p>
+          </div>
+        </section>
 
         <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <Link
-            href="/admin/reminders/settings"
-            className="rounded-lg border border-slate-200 p-5 hover:bg-slate-50"
+            href="/admin/reminders/manual"
+            className="rounded-lg border border-blue-200 bg-blue-50 p-5 hover:bg-blue-100"
           >
-            <h2 className="font-medium text-slate-900 mb-1">Settings</h2>
-            <p className="text-sm text-slate-600">
-              Turn reminders on/off, edit sender, portal URL, and milestone days.
+            <h2 className="font-medium text-blue-950 mb-1">Send one manually</h2>
+            <p className="text-sm text-blue-900">
+              Choose a teacher, load their documents, and send a one-off reminder.
             </p>
           </Link>
           <Link
             href="/admin/reminders/logs"
             className="rounded-lg border border-slate-200 p-5 hover:bg-slate-50"
           >
-            <h2 className="font-medium text-slate-900 mb-1">Send log</h2>
+            <h2 className="font-medium text-slate-900 mb-1">Open send log</h2>
             <p className="text-sm text-slate-600">
-              Every reminder the system attempted, with status and reason.
-            </p>
-          </Link>
-          <Link
-            href="/admin/reminders/preview"
-            className="rounded-lg border border-slate-200 p-5 hover:bg-slate-50"
-          >
-            <h2 className="font-medium text-slate-900 mb-1">Preview templates</h2>
-            <p className="text-sm text-slate-600">
-              See what each reminder type looks like. No emails are sent.
-            </p>
-          </Link>
-          <Link
-            href="/admin/reminders/manual"
-            className="rounded-lg border border-slate-200 p-5 hover:bg-slate-50"
-          >
-            <h2 className="font-medium text-slate-900 mb-1">Send manually</h2>
-            <p className="text-sm text-slate-600">
-              One-off send to a specific teacher. Bypasses the daily cap.
+              Review each attempted send, including skipped and failed reminders.
             </p>
           </Link>
         </section>
