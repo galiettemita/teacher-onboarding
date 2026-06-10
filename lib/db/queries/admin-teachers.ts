@@ -1,3 +1,5 @@
+import { randomBytes } from "crypto";
+import bcrypt from "bcryptjs";
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
@@ -278,28 +280,29 @@ export interface InviteTeacherInput {
 export interface InviteTeacherResult {
   id: string;
   email: string;
-  inviteEmailSent: boolean;
+  name: string;
+  temporaryPassword: string;
 }
 
-// Very forgiving email shape check — Auth.js will do the real validation
-// when (and if) we wire a real email provider in Phase 6.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function generateTemporaryPassword(): string {
+  return randomBytes(18).toString("base64url");
+}
 
 /**
  * Admin-creates-teacher flow (PROJECT_CONTEXT §5.6).
  *
  * In one transaction:
  *   1. Lowercase + validate email. Reject duplicates with ConflictError (409).
- *   2. Insert users row (role='teacher', email_verified_at=null).
- *   3. Insert teacher_profiles row pointing at the new user.
- *   4. Write user.invite audit row.
+ *   2. Generate a temporary password and store only its bcrypt hash.
+ *   3. Insert users row (role='teacher', email_verified_at=null).
+ *   4. Insert teacher_profiles row pointing at the new user.
+ *   5. Write user.invite audit row.
  *
- * Email delivery: PHASE-1 ships only the Credentials provider. The Auth.js
- * Email provider / magic-link send is not wired in this branch — that's a
- * Phase 6 dependency. Until then, the admin shares the temporary password
- * out-of-band; `inviteEmailSent` is always false. When Phase 6 lands, the
- * caller (route handler) is the integration point and should set the flag
- * to true after a successful Auth.js send.
+ * The temporary password is returned exactly once so the route can either send
+ * it by email when a real provider is configured or show it to the admin for
+ * out-of-band delivery. It is never written to audit logs.
  */
 export async function inviteTeacher(
   currentAdmin: { id: string; role: string },
@@ -313,6 +316,9 @@ export async function inviteTeacher(
     throw new ValidationError("A valid email is required");
   }
   if (!name) throw new ValidationError("Name is required");
+
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = await bcrypt.hash(temporaryPassword, 12);
 
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -330,6 +336,7 @@ export async function inviteTeacher(
         email: rawEmail,
         name,
         role: "teacher",
+        passwordHash,
         emailVerified: null,
       })
       .returning();
@@ -341,8 +348,7 @@ export async function inviteTeacher(
       gradeLevel: input.gradeLevel?.trim() || null,
     });
 
-    // Audit row metadata: only the recipient's own email — no admin identity
-    // beyond actorId, no PII beyond the new user's email (which they own).
+    // Audit row metadata never includes the temporary password.
     await auditLog({
       actorId: currentAdmin.id,
       action: "user.invite",
@@ -350,15 +356,15 @@ export async function inviteTeacher(
       targetId: created.id,
       metadata: {
         email: created.email,
-        emailDelivered: false,
-        note: "Auth.js Email provider not wired in this branch; invite email send deferred to Phase 6.",
+        credentialCreated: true,
       },
     });
 
     return {
       id: created.id,
       email: created.email,
-      inviteEmailSent: false,
+      name: created.name,
+      temporaryPassword,
     };
   });
 }

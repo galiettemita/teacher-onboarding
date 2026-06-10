@@ -78,13 +78,17 @@ export interface SendResult {
  * unrecognised is treated as a misconfiguration and we throw — silent
  * fall-through to console would be a production foot-gun.
  */
-function readProvider(): "console" | "resend" {
+export function readEmailProvider(): "console" | "resend" {
   const raw = (process.env.EMAIL_PROVIDER ?? "console").trim().toLowerCase();
   if (raw === "console" || raw === "") return "console";
   if (raw === "resend") return "resend";
   throw new Error(
     `Unsupported EMAIL_PROVIDER='${raw}'. Set EMAIL_PROVIDER to 'console' or 'resend'.`
   );
+}
+
+export function inviteEmailDeliveryEnabled(): boolean {
+  return readEmailProvider() === "resend";
 }
 
 function readResendApiKey(): string {
@@ -230,7 +234,7 @@ export async function sendEmail(msg: EmailMessage): Promise<SendResult> {
     ...(safeHtml ? { html: safeHtml } : {}),
   };
 
-  const provider = readProvider();
+  const provider = readEmailProvider();
   if (provider === "console") return sendViaConsole(safe);
   return sendViaResend(safe);
 }

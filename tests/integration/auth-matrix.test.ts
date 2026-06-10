@@ -19,8 +19,20 @@ vi.mock("@/lib/db/queries/admin-teachers", () => ({
   inviteTeacher: vi.fn(async () => ({
     id: "new-teacher-id",
     email: "new@example.com",
-    inviteEmailSent: false,
+    name: "New Teacher",
+    temporaryPassword: "temporary-password",
   })),
+}));
+vi.mock("@/lib/db/queries/reminder-settings", () => ({
+  getReminderSettings: vi.fn(async () => ({
+    senderName: "Onboarding Portal",
+    senderEmail: "noreply@example.com",
+    portalUrl: "http://localhost:3000/login",
+  })),
+}));
+vi.mock("@/lib/email/send", () => ({
+  inviteEmailDeliveryEnabled: vi.fn(() => false),
+  sendEmail: vi.fn(),
 }));
 vi.mock("@/lib/db/queries/admin-review", () => ({
   approveDocument: vi.fn(async () => ({ id: "doc-1", status: "approved" })),

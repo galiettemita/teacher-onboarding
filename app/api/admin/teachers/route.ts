@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth/config";
 import { inviteTeacher } from "@/lib/db/queries/admin-teachers";
+import { getReminderSettings } from "@/lib/db/queries/reminder-settings";
+import { inviteEmailDeliveryEnabled, sendEmail } from "@/lib/email/send";
+import { renderTeacherInvite } from "@/lib/email/templates/teacher-invite";
 import { errorResponse } from "@/lib/api/errors";
 
 /**
@@ -10,10 +13,10 @@ import { errorResponse } from "@/lib/api/errors";
  * See PROJECT_CONTEXT §5.6. Body shape:
  *   { email, name, phone?, hireDate?, gradeLevel? }
  *
- * Creates the user + teacher_profiles row + audit entry. Magic-link email
- * delivery is a Phase 6 dependency (Auth.js Email provider not wired in
- * this branch); the response carries `inviteEmailSent: false` so the UI
- * can show a "share credentials manually" message.
+ * Creates the user + teacher_profiles row + audit entry, generates a temporary
+ * password, and sends the invite when a real email provider is configured.
+ * Local/console email environments return the one-time credential so the admin
+ * can share it out-of-band without writing it to logs.
  */
 const Body = z.object({
   email: z.string().email().max(254),
@@ -61,11 +64,42 @@ export async function POST(req: Request) {
         gradeLevel: parsed.data.gradeLevel ?? null,
       }
     );
+    const settings = await getReminderSettings();
+    let inviteEmailSent = false;
+    let inviteEmailError: string | null = null;
+
+    try {
+      if (inviteEmailDeliveryEnabled()) {
+        const rendered = renderTeacherInvite({
+          teacher: { firstName: result.name.split(/\s+/)[0] || result.name },
+          settings: {
+            schoolName: settings.senderName,
+            portalUrl: settings.portalUrl,
+          },
+          temporaryPassword: result.temporaryPassword,
+        });
+        const sendResult = await sendEmail({
+          to: result.email,
+          from: { name: settings.senderName, email: settings.senderEmail },
+          subject: rendered.subject,
+          text: rendered.text,
+          html: rendered.html,
+        });
+        inviteEmailSent = sendResult.ok;
+        inviteEmailError = sendResult.ok ? null : sendResult.error ?? "Invite email could not be sent.";
+      }
+    } catch (err) {
+      inviteEmailError = err instanceof Error ? err.message : "Invite email could not be sent.";
+    }
+
     return NextResponse.json(
       {
         id: result.id,
         email: result.email,
-        inviteEmailSent: result.inviteEmailSent,
+        loginUrl: settings.portalUrl,
+        inviteEmailSent,
+        inviteEmailError,
+        temporaryPassword: inviteEmailSent ? undefined : result.temporaryPassword,
       },
       { status: 201 }
     );

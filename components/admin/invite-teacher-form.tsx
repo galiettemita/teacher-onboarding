@@ -28,8 +28,12 @@ export function InviteTeacherForm() {
   const [success, setSuccess] = useState<{
     id: string;
     email: string;
+    loginUrl: string;
     inviteEmailSent: boolean;
+    inviteEmailError: string | null;
+    temporaryPassword?: string;
   } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   function update<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -68,25 +72,51 @@ export function InviteTeacherForm() {
   }
 
   if (success) {
+    const fallbackMessage = success.temporaryPassword
+      ? `Your teacher onboarding account is ready.\n\nLog in: ${success.loginUrl}\nEmail: ${success.email}\nTemporary password: ${success.temporaryPassword}`
+      : "";
+
     return (
-      <div className="bg-white border border-green-200 rounded-xl p-6">
+      <div className="bg-white border border-green-200 rounded-xl p-6 max-w-2xl">
         <h2 className="text-lg font-medium text-green-900">Teacher created</h2>
         <p className="text-sm text-slate-700 mt-1">
           Account created for <span className="font-medium">{success.email}</span>.
         </p>
         {success.inviteEmailSent ? (
-          <p className="text-sm text-slate-700 mt-2">A magic-link invite email has been sent.</p>
-        ) : (
-          <p className="text-sm text-amber-800 mt-2 bg-amber-50 border border-amber-200 rounded-md p-3">
-            Invite email delivery is not yet enabled in this environment. Share the
-            login URL and a temporary credential with the teacher out-of-band until
-            the email provider is configured (Phase 6).
+          <p className="text-sm text-slate-700 mt-2">
+            An invite email with the login link and temporary password has been sent.
           </p>
+        ) : (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <p className="font-medium">Send these login details to the teacher.</p>
+            <p className="mt-1">
+              Invite email delivery is not enabled here{success.inviteEmailError ? `: ${success.inviteEmailError}` : ""}.
+              Copy the details below and share them out-of-band.
+            </p>
+            <div className="mt-3 rounded-md border border-amber-200 bg-white p-3 text-slate-900">
+              <p><span className="font-medium">Login URL:</span> {success.loginUrl}</p>
+              <p><span className="font-medium">Email:</span> {success.email}</p>
+              <p><span className="font-medium">Temporary password:</span> {success.temporaryPassword}</p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(fallbackMessage);
+                setCopied(true);
+              }}
+              className="mt-3 rounded-md bg-amber-700 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800"
+            >
+              {copied ? "Copied" : "Copy login details"}
+            </button>
+          </div>
         )}
         <div className="mt-4 flex gap-2">
           <button
             type="button"
-            onClick={() => setSuccess(null)}
+            onClick={() => {
+              setSuccess(null);
+              setCopied(false);
+            }}
             className="rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2"
           >
             Invite another
