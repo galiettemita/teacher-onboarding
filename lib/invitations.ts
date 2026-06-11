@@ -20,13 +20,22 @@ export async function buildInvitation(args: {
   temporaryPassword: string;
 }): Promise<InvitationContent> {
   const settings = await getEmailSettings();
+  // Point teachers at the deployment's real public origin. AUTH_URL is the
+  // canonical origin Auth.js already uses for callbacks; prefer it over the
+  // `email_settings.portal_url` default (which has no editor UI and otherwise
+  // stays at the dev localhost value in production).
+  const origin = (process.env.AUTH_URL ?? settings.portalUrl ?? "http://localhost:3000")
+    .trim()
+    .replace(/\/+$/, "");
+  const loginUrl = `${origin}/login`;
+
   const rendered = renderTeacherInvite({
     teacher: { firstName: args.name.split(/\s+/)[0] || args.name },
-    settings: { schoolName: settings.senderName, portalUrl: settings.portalUrl },
+    settings: { schoolName: settings.senderName, portalUrl: loginUrl },
     temporaryPassword: args.temporaryPassword,
   });
   return {
-    loginUrl: settings.portalUrl,
+    loginUrl,
     temporaryPassword: args.temporaryPassword,
     invitation: { subject: rendered.subject, text: rendered.text },
   };
