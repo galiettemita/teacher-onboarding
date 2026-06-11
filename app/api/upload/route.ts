@@ -12,6 +12,7 @@ import {
   uploadFieldsSchema,
 } from "@/lib/validation/file";
 import { insertMyDocument } from "@/lib/db/queries/teacher-documents";
+import { getActivationStatus } from "@/lib/db/queries/activation";
 import { auditLog } from "@/lib/audit/log";
 
 export const runtime = "nodejs";
@@ -51,6 +52,13 @@ export async function POST(req: Request): Promise<Response> {
   // 2. teacher only
   if (user.role !== "teacher") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const activation = await getActivationStatus(user.id);
+  if (activation.mustChangePassword) {
+    return NextResponse.json(
+      { error: "Account activation required", activateUrl: "/teacher/activate" },
+      { status: 403 }
+    );
   }
 
   // 5. cheap Content-Length pre-check before reading the body

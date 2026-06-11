@@ -42,12 +42,12 @@ Verified by direct inspection: `ls -la` shows only `.git/`; `git log` reports "y
 | **UI kit** | Tailwind CSS + shadcn/ui | Accessible defaults, easy to make grandma-friendly |
 | **Backend** | Next.js Route Handlers (`app/api/**`) + Server Actions | One process, no separate API service |
 | **Database** | **Supabase Postgres** (production) / local Postgres via Docker (development). **Drizzle ORM** is the schema + migration + query layer on top. | Supabase provides the managed Postgres engine; Drizzle owns the schema files in `drizzle/` and is the only thing that writes DDL. We do NOT use the Supabase migration CLI. SQLite is not used. |
-| **Auth** | **Auth.js (NextAuth v5)** with the Drizzle adapter — email magic link primary, password fallback optional | Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`. We use Auth.js (not Supabase Auth) so role + session live in our own `users` table and there is one auth path to reason about. Supabase JWT / Supabase Auth is explicitly NOT used. |
+| **Auth** | **Auth.js (NextAuth v5)** with the Drizzle adapter — email + password credentials (newly invited teachers use a one-time temporary password, then set their own at `/teacher/activate`). No email is sent. | Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`. We use Auth.js (not Supabase Auth) so role + session live in our own `users` table and there is one auth path to reason about. Supabase JWT / Supabase Auth is explicitly NOT used. |
 | **Authorization** | Role on `users.role` (`teacher` \| `admin`) + per-row ownership checks inside `lib/db/queries/*` + middleware route gating | Enforced server-side only. No Supabase RLS — all access control is in application code so it can be unit-tested. |
 | **File storage** | **Supabase Storage** (production, private bucket) via the storage adapter / local disk (development only). | Files keyed by server-generated UUID, never by user-supplied name. The bucket is private (no public ACL). All client reads go through `/api/files/[id]` which authenticates the user, checks ownership/role, then either streams bytes via the Supabase service-role client or issues a short-lived signed URL (≤60s) created server-side. **Deploying with the local adapter in production is forbidden.** S3 / Cloudflare R2 are acceptable substitutes if Supabase Storage is ever swapped out, but the default is Supabase Storage. |
 | **Private downloads** | All downloads go through `GET /api/files/[id]`. The route: (1) requires a session, (2) loads the document row, (3) checks `doc.user_id === session.user.id OR session.user.role === 'admin'`, (4) streams bytes from storage with `Content-Disposition: attachment` and `Cache-Control: private, no-store`. No direct storage URLs are ever exposed to the client. Signed URLs, if used, are ≤60s and generated server-side after the same check. |
 | **Background jobs** | Vercel Cron (or `node-cron` on VPS) hitting `POST /api/cron/expiry` daily with a shared secret header | Marks `expired` |
-| **Email** | Resend or SMTP via Nodemailer | Magic links + teacher invites |
+| **Email** | **None** — no outbound email | Teacher invitations are manual: inviting a teacher returns a login URL, a one-time temporary password, and a copyable invitation message the admin delivers out-of-band (copy/paste). The `email_settings` row supplies the sender display name + portal URL shown in that invitation text; `lib/email/templates/*` renders the content. |
 | **Logging / audit** | `audit_logs` table written from a single `lib/audit/log.ts` helper | Every admin mutation + every file download |
 
 ### Directory layout (canonical)
@@ -97,7 +97,7 @@ All tables use `id: uuid primary key default gen_random_uuid()` and `created_at 
 | name | text not null | |
 | role | text not null check in (`teacher`, `admin`) | Default `teacher` |
 | password_hash | text nullable | Only if password auth enabled |
-| email_verified_at | timestamptz nullable | |
+| email_verified_at | timestamptz nullable | Repurposed as the account-activation marker: `null` until the teacher signs in with the temporary password and sets their own password at `/teacher/activate`. Admin teacher detail shows this as "Account Created: Yes / No (Account Creation Pending)". |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
@@ -180,13 +180,13 @@ Every admin mutation, every file download (by anyone), every login attempt.
 
 ### 3.6 `email_settings`
 
-Singleton-style configuration row holding the outbound-mail sender identity used by teacher invite emails. The migration seeds exactly one row; admin UI edits it in place. Code MUST handle "row missing" by falling back to documented defaults.
+Singleton-style configuration row holding the sender display name and portal URL shown in the teacher invitation text (rendered by `lib/email/templates/*`). No email is sent; invitations are delivered manually (copy/paste). The migration seeds exactly one row; admin UI edits it in place. Code MUST handle "row missing" by falling back to documented defaults.
 
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid PK | Singleton: enforced via unique constant or `id = '00000000-0000-0000-0000-000000000001'` |
-| sender_name | text not null default `'Onboarding Portal'` | Display name in From header |
-| sender_email | text not null | Must be a verified sender at the email provider |
+| sender_name | text not null default `'Onboarding Portal'` | Display name shown in the invitation text |
+| sender_email | text not null | Sender address shown in the invitation text (no email is sent) |
 | portal_url | text not null | Base URL for the "Log in to portal" CTA |
 | created_at, updated_at | timestamptz | |
 
@@ -303,19 +303,20 @@ This is the **only** approved login flow. No public sign-up exists. There is no 
 
 **Account creation:**
 
-1. **Admin creates the teacher.** Admin goes to `/admin/teachers/new`, enters the teacher's name + email, optional profile fields. Server-side:
-   - Creates a `users` row with `role = 'teacher'` and `email_verified_at = null`.
+1. **Admin invites the teacher.** Admin enters the teacher's name + email, optional profile fields. Server-side:
+   - Creates a `users` row with `role = 'teacher'` and the account not yet activated.
    - Creates the matching `teacher_profiles` row.
-   - Sends an **invite email** containing a magic-link login URL (generated by Auth.js). The email body carries no file data and a single CTA = log in.
+   - Generates a one-time **temporary password** and returns, to the admin, a login URL, that temporary password, and a ready-to-send copyable invitation message. **No email is sent** — the admin delivers it out-of-band (copy/paste).
    - Writes an `audit_logs` row (`action = 'user.invite'`).
+   The teacher signs in with the temporary password, is forced to `/teacher/activate` to set their own password (blocked from everything else until they do), and on success the temporary password stops working and the account is activated. An admin can "re-invite" a not-yet-activated teacher to regenerate the temporary password.
 2. **Initial admin** is seeded via the Phase 1 seed script and migration — never via UI. To add additional admins, an existing admin uses a CLI seed (out of MVP UI scope).
-3. **Teachers cannot self-register.** The `/login` page accepts an email; if no `users` row exists, the response is generic ("If that address is on file, a link has been sent") to prevent email enumeration.
+3. **Teachers cannot self-register.** There is no public sign-up. A teacher only gets an account when an admin invites them and hands over the login URL + temporary password out-of-band.
 
 **Login flow:**
 
 1. User visits any protected URL while unauthenticated → middleware redirects to `/login`.
-2. User enters email on `/login` → server triggers Auth.js magic-link send.
-3. User clicks the magic link → Auth.js verifies the token, sets the session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`), and on first successful verification sets `users.email_verified_at`.
+2. User enters email + password on `/login`. A newly invited teacher uses the one-time temporary password from their invitation.
+3. On valid credentials, Auth.js sets the session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`). A teacher who has not yet activated their account is forced to `/teacher/activate` to set their own password (blocked from everything else until they do); on success the temporary password stops working and the account is activated.
 4. **Role-based redirect** happens server-side immediately after sign-in, in `app/auth/callback/route.ts` (or the Auth.js `redirect` callback):
    - `users.role === 'admin'` → redirect to `/admin/dashboard`
    - `users.role === 'teacher'` → redirect to `/teacher/dashboard`
@@ -365,11 +366,11 @@ A teacher hitting any `/admin/**` or `/api/admin/**` URL receives **403**, not a
 - Next.js + TS + Tailwind + shadcn/ui scaffold
 - **Supabase project provisioned** (or local Postgres via Docker for dev); connection string in `.env`
 - Drizzle config pointed at Supabase Postgres; initial migration creating all **7** tables from §3
-- Auth.js v5 with Drizzle adapter, email magic link, role on user, login page, logout, role-based redirect callback (see §5.6)
+- Auth.js v5 with Drizzle adapter, email + password credentials, role on user, login page, logout, role-based redirect callback (see §5.6)
 - Middleware: session gate + role gate (per §5.6 table)
 - Storage adapter with two implementations: `local` (dev) and `supabase` (prod, private bucket); upload + download routes scaffolded as 501 stubs (not yet wired to UI)
 - Seed script: 1 admin user, 3 sample `document_types`, 1 `email_settings` row with defaults
-- `.env.example` documents: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `EMAIL_SERVER` (Resend or SMTP), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `STORAGE_DRIVER` (`local` \| `supabase`), `CRON_SECRET`
+- `.env.example` documents: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `STORAGE_DRIVER` (`local` \| `supabase`), `CRON_SECRET` (no email-server vars — the portal sends no email)
 - `README.md`, CI: typecheck + lint
 
 ### Phase 2 — Teacher dashboard + upload flow
@@ -622,7 +623,7 @@ A phase is **not** complete until every item below is demonstrated on the branch
 
 ### 10.4 Manual smoke tests (every release)
 
-1. Create a new teacher via admin → teacher receives magic link → logs in → sees empty dashboard
+1. Invite a new teacher via admin → copy the login URL + temporary password → sign in → set a new password at `/teacher/activate` → see empty dashboard
 2. Teacher uploads a PDF for each required type → all show `pending`
 3. Admin approves all → teacher dashboard shows all `approved` + expiry dates
 4. Admin rejects one → teacher sees rejection reason → re-uploads → back to `pending`
@@ -657,7 +658,7 @@ The portal is the five-phase MVP described above: auth + schema + storage founda
 1. Next.js 15 + TypeScript + Tailwind + shadcn/ui scaffold
 2. Drizzle config + initial migration creating all **7** tables with constraints and indexes from §3
 3. Seed: 1 admin user, 3 sample `document_types`, 1 `email_settings` row with defaults
-4. Auth.js v5 with email magic link, role on user, login page, logout
+4. Auth.js v5 with email + password credentials, role on user, login page, logout
 5. Middleware enforcing session + role gating
 6. Local storage adapter, with `/api/upload` and `/api/files/[id]` stubbed (501) so downstream branches have stable import paths
 7. `.env.example`, `README.md`, CI running typecheck + lint

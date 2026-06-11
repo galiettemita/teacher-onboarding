@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireTeacher } from "@/lib/auth/guards";
+import { requireTeacherReady } from "@/lib/auth/guards";
 import { signOut } from "@/lib/auth/config";
 import { listMyDocumentTypesWithStatus } from "@/lib/db/queries/teacher-documents";
 import { ProgressCard } from "@/components/teacher/progress-card";
@@ -14,7 +14,7 @@ import { DocumentCard } from "@/components/teacher/document-card";
 export const dynamic = "force-dynamic";
 
 export default async function TeacherDashboard() {
-  const user = await requireTeacher();
+  const user = await requireTeacherReady();
   const entries = await listMyDocumentTypesWithStatus(user);
 
   async function logout() {

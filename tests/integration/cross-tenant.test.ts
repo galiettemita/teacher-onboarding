@@ -134,6 +134,9 @@ describe("Cross-tenant isolation (HTTP layer)", () => {
     vi.doMock("@/lib/db/queries/teacher-documents", () => ({
       getDocumentByIdUnscoped: async () => TEACHER_B_DOC,
     }));
+    vi.doMock("@/lib/db/queries/activation", () => ({
+      getActivationStatus: async () => ({ mustChangePassword: false }),
+    }));
     vi.doMock("@/lib/storage", () => ({
       getStorage: () => ({
         get: async () => ({ body: Buffer.from(""), contentType: "" }),

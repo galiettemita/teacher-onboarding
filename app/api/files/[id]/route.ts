@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth/config";
 import { getStorage } from "@/lib/storage";
 import { sanitizeFilename } from "@/lib/validation/file";
 import { getDocumentByIdUnscoped } from "@/lib/db/queries/teacher-documents";
+import { getActivationStatus } from "@/lib/db/queries/activation";
 import { auditLog } from "@/lib/audit/log";
 
 export const runtime = "nodejs";
@@ -34,6 +35,15 @@ export async function GET(
   }
   const userId = session.user.id;
   const role = session.user.role;
+  if (role === "teacher") {
+    const activation = await getActivationStatus(userId);
+    if (activation.mustChangePassword) {
+      return NextResponse.json(
+        { error: "Account activation required", activateUrl: "/teacher/activate" },
+        { status: 403 }
+      );
+    }
+  }
 
   const { id } = await ctx.params;
 

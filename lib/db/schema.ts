@@ -23,6 +23,12 @@ export const users = pgTable(
     name: text("name").notNull(),
     role: text("role").notNull().default("teacher"),
     passwordHash: text("password_hash"),
+    // Account-activation state. `mustChangePassword` is the access gate: while
+    // true the teacher is forced into /teacher/activate and can do nothing else.
+    // `activatedAt` records when the teacher created their own password (null
+    // until activated); it powers the admin "Account Created" status display.
+    mustChangePassword: boolean("must_change_password").notNull().default(false),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
     // Auth.js Drizzle adapter expects JS property names `emailVerified` and `image`.
     // We keep PROJECT_CONTEXT's `email_verified_at` as the DB column name.
     emailVerified: timestamp("email_verified_at", { mode: "date", withTimezone: true }),

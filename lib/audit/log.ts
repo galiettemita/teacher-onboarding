@@ -24,6 +24,7 @@ export type AuditAction =
   | "doc_type.update"
   | "doc_type.deactivate"
   | "user.invite"
+  | "user.password_change"
   | "file.download"
   | "file.missing"
   | "report.export";

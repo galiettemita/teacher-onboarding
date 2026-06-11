@@ -20,8 +20,16 @@ response, [`docs/SECURITY.md`](./docs/SECURITY.md).
   `expiring_soon`), upload PDFs, and download their own files.
 - **Admins** can list every teacher, drill into one teacher's documents,
   approve or reject uploads (with a reason), manage the document-type
-  catalog, invite new teachers, **export completion + expiry CSV reports**,
-  and **browse the audit log**.
+  catalog, **invite new teachers** (the portal returns a login URL, a
+  one-time temporary password, and a ready-to-send copyable invitation
+  message that the admin delivers out-of-band), **export completion +
+  expiry CSV reports**, and **browse the audit log**.
+- **Account activation** is manual and email-free: an admin invites a
+  teacher → the teacher signs in with the temporary password → is forced
+  to `/teacher/activate` to set their own password (blocked from
+  everything else until they do) → on success the temporary password
+  stops working and the account is activated. An admin can "re-invite" a
+  not-yet-activated teacher to regenerate the temporary password.
 - **Renewal** is automatic: approving a doc sets `expires_at = reviewed_at +
   renewal_months`. A daily cron sweeps past-due `approved` docs to
   `expired`. A new upload after expiry creates a fresh row and links the
@@ -90,9 +98,12 @@ Change these immediately in any shared environment.
 | `LOCAL_STORAGE_DIR` | Local file directory (default `./.uploads`). |
 | `CRON_SECRET` | Shared secret for `/api/cron/expiry`. |
 | `EXPIRING_SOON_WINDOW_DAYS` | Optional. Integer days (default 30). |
-| `EMAIL_PROVIDER` | Optional. `console` (default), `resend`, or `sendgrid` for outbound invite emails. |
-| `RESEND_API_KEY` / `SENDGRID_API_KEY` | Required only when using that email provider. Server-only; never `NEXT_PUBLIC_`. |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Used by `pnpm db:seed`. |
+
+The portal sends **no email**. Teacher invitations are manual: inviting a
+teacher returns a login URL, a one-time temporary password, and a copyable
+invitation message that the admin delivers out-of-band (copy/paste). There is
+no SMTP/Resend/SendGrid configuration.
 
 Full list, including production-only Supabase vars, lives in
 [`docs/DEPLOY.md`](./docs/DEPLOY.md).

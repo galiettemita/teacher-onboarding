@@ -30,10 +30,6 @@ vi.mock("@/lib/db/queries/email-settings", () => ({
     portalUrl: "http://localhost:3000/login",
   })),
 }));
-vi.mock("@/lib/email/send", () => ({
-  inviteEmailDeliveryEnabled: vi.fn(() => false),
-  sendEmail: vi.fn(),
-}));
 vi.mock("@/lib/db/queries/admin-review", () => ({
   approveDocument: vi.fn(async () => ({ id: "doc-1", status: "approved" })),
   rejectDocument: vi.fn(async () => ({ id: "doc-1", status: "rejected" })),

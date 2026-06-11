@@ -2,21 +2,18 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth/config";
 import { inviteTeacher } from "@/lib/db/queries/admin-teachers";
-import { getEmailSettings } from "@/lib/db/queries/email-settings";
-import { inviteEmailDeliveryEnabled, sendEmail } from "@/lib/email/send";
-import { renderTeacherInvite } from "@/lib/email/templates/teacher-invite";
+import { buildInvitation } from "@/lib/invitations";
 import { errorResponse } from "@/lib/api/errors";
 
 /**
  * POST /api/admin/teachers — admin-creates-teacher invite flow.
  *
- * See PROJECT_CONTEXT §5.6. Body shape:
- *   { email, name, phone?, hireDate?, gradeLevel? }
+ * Body shape: { email, name, phone?, hireDate?, gradeLevel? }
  *
- * Creates the user + teacher_profiles row + audit entry, generates a temporary
- * password, and sends the invite when a real email provider is configured.
- * Local/console email environments return the one-time credential so the admin
- * can share it out-of-band without writing it to logs.
+ * Transactionally creates the user (pending activation) + teacher_profiles row
+ * + audit entry and generates a one-time temporary password. The application
+ * sends no email; the response carries the login URL, the temporary password,
+ * and a ready-to-send invitation message for the admin to deliver out-of-band.
  */
 const Body = z.object({
   email: z.string().email().max(254),
@@ -64,42 +61,18 @@ export async function POST(req: Request) {
         gradeLevel: parsed.data.gradeLevel ?? null,
       }
     );
-    const settings = await getEmailSettings();
-    let inviteEmailSent = false;
-    let inviteEmailError: string | null = null;
 
-    try {
-      if (inviteEmailDeliveryEnabled()) {
-        const rendered = renderTeacherInvite({
-          teacher: { firstName: result.name.split(/\s+/)[0] || result.name },
-          settings: {
-            schoolName: settings.senderName,
-            portalUrl: settings.portalUrl,
-          },
-          temporaryPassword: result.temporaryPassword,
-        });
-        const sendResult = await sendEmail({
-          to: result.email,
-          from: { name: settings.senderName, email: settings.senderEmail },
-          subject: rendered.subject,
-          text: rendered.text,
-          html: rendered.html,
-        });
-        inviteEmailSent = sendResult.ok;
-        inviteEmailError = sendResult.ok ? null : sendResult.error ?? "Invite email could not be sent.";
-      }
-    } catch (err) {
-      inviteEmailError = err instanceof Error ? err.message : "Invite email could not be sent.";
-    }
+    const content = await buildInvitation({
+      name: result.name,
+      temporaryPassword: result.temporaryPassword,
+    });
 
     return NextResponse.json(
       {
         id: result.id,
         email: result.email,
-        loginUrl: settings.portalUrl,
-        inviteEmailSent,
-        inviteEmailError,
-        temporaryPassword: inviteEmailSent ? undefined : result.temporaryPassword,
+        name: result.name,
+        ...content,
       },
       { status: 201 }
     );

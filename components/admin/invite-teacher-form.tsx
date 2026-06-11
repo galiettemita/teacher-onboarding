@@ -28,10 +28,10 @@ export function InviteTeacherForm() {
   const [success, setSuccess] = useState<{
     id: string;
     email: string;
+    name: string;
     loginUrl: string;
-    inviteEmailSent: boolean;
-    inviteEmailError: string | null;
-    temporaryPassword?: string;
+    temporaryPassword: string;
+    invitation: { subject: string; text: string };
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -72,44 +72,56 @@ export function InviteTeacherForm() {
   }
 
   if (success) {
-    const fallbackMessage = success.temporaryPassword
-      ? `Your teacher onboarding account is ready.\n\nLog in: ${success.loginUrl}\nEmail: ${success.email}\nTemporary password: ${success.temporaryPassword}`
-      : "";
+    const copyText = `Subject: ${success.invitation.subject}\n\n${success.invitation.text}`;
 
     return (
       <div className="bg-white border border-green-200 rounded-xl p-6 max-w-2xl">
-        <h2 className="text-lg font-medium text-green-900">Teacher created</h2>
+        <h2 className="text-lg font-medium text-green-900">Teacher invited</h2>
         <p className="text-sm text-slate-700 mt-1">
-          Account created for <span className="font-medium">{success.email}</span>.
+          Account created for <span className="font-medium">{success.email}</span>. They&apos;re
+          pending activation until they sign in and create their own password.
         </p>
-        {success.inviteEmailSent ? (
-          <p className="text-sm text-slate-700 mt-2">
-            An invite email with the login link and temporary password has been sent.
+
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-medium">Send this invitation to the teacher.</p>
+          <p className="mt-1">
+            The temporary password is shown once, here, and is not stored in readable form —
+            copy it now. The teacher must change it the first time they sign in.
           </p>
-        ) : (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <p className="font-medium">Send these login details to the teacher.</p>
-            <p className="mt-1">
-              Invite email delivery is not enabled here{success.inviteEmailError ? `: ${success.inviteEmailError}` : ""}.
-              Copy the details below and share them out-of-band.
-            </p>
-            <div className="mt-3 rounded-md border border-amber-200 bg-white p-3 text-slate-900">
-              <p><span className="font-medium">Login URL:</span> {success.loginUrl}</p>
-              <p><span className="font-medium">Email:</span> {success.email}</p>
-              <p><span className="font-medium">Temporary password:</span> {success.temporaryPassword}</p>
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
-                await navigator.clipboard.writeText(fallbackMessage);
-                setCopied(true);
-              }}
-              className="mt-3 rounded-md bg-amber-700 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800"
-            >
-              {copied ? "Copied" : "Copy login details"}
-            </button>
+
+          <dl className="mt-3 grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 font-mono text-xs text-slate-900">
+            <dt className="text-amber-800">Login URL</dt>
+            <dd className="break-all">{success.loginUrl}</dd>
+            <dt className="text-amber-800">Email</dt>
+            <dd className="break-all">{success.email}</dd>
+            <dt className="text-amber-800">Temp password</dt>
+            <dd className="break-all">{success.temporaryPassword}</dd>
+          </dl>
+
+          <div className="mt-3 space-y-2">
+            <label htmlFor="teacher-invitation" className="block font-medium text-amber-950">
+              Ready-to-send invitation
+            </label>
+            <textarea
+              id="teacher-invitation"
+              readOnly
+              value={copyText}
+              rows={12}
+              className="w-full rounded-md border border-amber-200 bg-white p-3 font-mono text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
           </div>
-        )}
+          <button
+            type="button"
+            onClick={async () => {
+              await navigator.clipboard.writeText(copyText);
+              setCopied(true);
+            }}
+            className="mt-3 rounded-md bg-amber-700 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800"
+          >
+            {copied ? "Copied" : "Copy invitation"}
+          </button>
+        </div>
+
         <div className="mt-4 flex gap-2">
           <button
             type="button"
@@ -214,7 +226,7 @@ export function InviteTeacherForm() {
         disabled={busy}
         className="rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 disabled:opacity-50"
       >
-        {busy ? "Creating…" : "Create teacher"}
+        {busy ? "Inviting…" : "Invite teacher"}
       </button>
     </form>
   );
