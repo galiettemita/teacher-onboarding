@@ -46,8 +46,8 @@ Verified by direct inspection: `ls -la` shows only `.git/`; `git log` reports "y
 | **Authorization** | Role on `users.role` (`teacher` \| `admin`) + per-row ownership checks inside `lib/db/queries/*` + middleware route gating | Enforced server-side only. No Supabase RLS — all access control is in application code so it can be unit-tested. |
 | **File storage** | **Supabase Storage** (production, private bucket) via the storage adapter / local disk (development only). | Files keyed by server-generated UUID, never by user-supplied name. The bucket is private (no public ACL). All client reads go through `/api/files/[id]` which authenticates the user, checks ownership/role, then either streams bytes via the Supabase service-role client or issues a short-lived signed URL (≤60s) created server-side. **Deploying with the local adapter in production is forbidden.** S3 / Cloudflare R2 are acceptable substitutes if Supabase Storage is ever swapped out, but the default is Supabase Storage. |
 | **Private downloads** | All downloads go through `GET /api/files/[id]`. The route: (1) requires a session, (2) loads the document row, (3) checks `doc.user_id === session.user.id OR session.user.role === 'admin'`, (4) streams bytes from storage with `Content-Disposition: attachment` and `Cache-Control: private, no-store`. No direct storage URLs are ever exposed to the client. Signed URLs, if used, are ≤60s and generated server-side after the same check. |
-| **Background jobs** | Vercel Cron (or `node-cron` on VPS) hitting `POST /api/cron/expiry` daily with a shared secret header | Marks `expired`, sends reminders |
-| **Email** | Resend or SMTP via Nodemailer | Magic links + expiry reminders |
+| **Background jobs** | Vercel Cron (or `node-cron` on VPS) hitting `POST /api/cron/expiry` daily with a shared secret header | Marks `expired` |
+| **Email** | Resend or SMTP via Nodemailer | Magic links + teacher invites |
 | **Logging / audit** | `audit_logs` table written from a single `lib/audit/log.ts` helper | Every admin mutation + every file download |
 
 ### Directory layout (canonical)
@@ -84,9 +84,9 @@ tests/              vitest + playwright
 
 ## 3. Data Model
 
-All tables use `id: uuid primary key default gen_random_uuid()` and `created_at timestamptz not null default now()` unless noted. All foreign keys are `on delete restrict` except `audit_logs.actor_id` and `notification_logs.actor_id` which are `on delete set null`.
+All tables use `id: uuid primary key default gen_random_uuid()` and `created_at timestamptz not null default now()` unless noted. All foreign keys are `on delete restrict` except `audit_logs.actor_id` which is `on delete set null`.
 
-**Tables in scope (8 total):** `users`, `teacher_profiles`, `document_types`, `teacher_documents`, `audit_logs`, `reminder_settings`, `notification_logs`, `scheduled_job_runs`.
+**Tables in scope (7 total):** `users`, `teacher_profiles`, `document_types`, `teacher_documents`, `audit_logs`, `email_settings`, `scheduled_job_runs`.
 
 ### 3.1 `users`
 
@@ -178,75 +178,36 @@ Every admin mutation, every file download (by anyone), every login attempt.
 
 **Indexes:** `(actor_id, created_at desc)`, `(target_type, target_id)`, `(action, created_at desc)`.
 
-### 3.6 `reminder_settings`
+### 3.6 `email_settings`
 
-Singleton-style configuration row for the automated email reminder system (see §11). The migration seeds exactly one row; admin UI edits it in place. Code MUST handle "row missing" by falling back to documented defaults.
+Singleton-style configuration row holding the outbound-mail sender identity used by teacher invite emails. The migration seeds exactly one row; admin UI edits it in place. Code MUST handle "row missing" by falling back to documented defaults.
 
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid PK | Singleton: enforced via unique constant or `id = '00000000-0000-0000-0000-000000000001'` |
-| enabled | boolean not null default true | Master on/off switch for all automated reminders |
 | sender_name | text not null default `'Onboarding Portal'` | Display name in From header |
 | sender_email | text not null | Must be a verified sender at the email provider |
 | portal_url | text not null | Base URL for the "Log in to portal" CTA |
-| reminder_days_before_expiration | integer[] not null default `'{90,60,30,14,7}'` | Milestones (days before `expires_at`) |
-| post_expiration_interval_days | integer not null default 7 | Cadence after expiration until renewed + approved |
-| max_one_email_per_teacher_per_day | boolean not null default true | Hard rate limit per teacher |
-| pending_review_days_before_admin_alert | integer nullable | If set, alert admin when a doc has been `pending` longer than N days |
-| missing_doc_reminder_interval_days | integer not null default 14 | Cadence for "you still have missing required documents" reminder |
-| rejected_doc_reminder_interval_days | integer not null default 7 | Cadence for "rejected, please re-upload" reminder |
 | created_at, updated_at | timestamptz | |
 
-### 3.7 `notification_logs`
+### 3.7 `scheduled_job_runs`
 
-Append-only log of every reminder the system attempted to send. Used for duplicate prevention, admin visibility, and audit. **Never deleted.**
-
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid PK | |
-| teacher_id | uuid FK → users.id not null | The recipient |
-| teacher_document_id | uuid FK → teacher_documents.id nullable | Null for non-doc-scoped reminders (e.g. "you have missing documents") |
-| document_type_id | uuid FK → document_types.id nullable | Helpful when `teacher_document_id` is null but reminder concerns a specific type |
-| reminder_type | text not null check in (`missing_required`, `rejected_replace`, `expiring_90`, `expiring_60`, `expiring_30`, `expiring_14`, `expiring_7`, `expired_today`, `expired_recurring`, `pending_admin_alert`, `manual`) | |
-| milestone_key | text not null | Idempotency key, e.g. `expiring_30:{teacher_document_id}` or `missing_required:{user_id}:{document_type_id}:{YYYY-MM-DD}` — UNIQUE per (teacher_id, milestone_key) |
-| recipient_email | text not null | Snapshot at send time |
-| subject | text not null | |
-| status | text not null check in (`queued`, `sent`, `failed`, `skipped`) | |
-| provider_message_id | text nullable | From email provider (e.g. Resend ID) |
-| sent_at | timestamptz nullable | Set when status = `sent` |
-| failed_reason | text nullable | Provider error message |
-| skipped_reason | text nullable | e.g. `daily_cap`, `duplicate_milestone`, `reminders_disabled`, `no_email_on_file` |
-| triggered_by | text not null check in (`cron`, `admin_manual`) | |
-| actor_id | uuid FK → users.id nullable | Set when `triggered_by = 'admin_manual'` |
-| created_at | timestamptz | |
-
-**Indexes:**
-- UNIQUE `(teacher_id, milestone_key)` — enforces "send each milestone at most once"
-- `(teacher_id, created_at desc)`
-- `(status, created_at desc)`
-- `(reminder_type, created_at desc)`
-
-### 3.8 `scheduled_job_runs`
-
-One row per cron tick. Lets admins see when the job ran, what it processed, and any failures. Useful for diagnosing missing reminders.
+One row per cron tick. Lets admins see when the daily expiry sweep ran, what it processed, and any failures.
 
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid PK | |
-| job_name | text not null | e.g. `expiry_sweep`, `reminder_dispatch` |
+| job_name | text not null | e.g. `expiry_sweep` |
 | started_at | timestamptz not null default now() | |
 | finished_at | timestamptz nullable | |
 | status | text not null check in (`running`, `success`, `failed`) | |
 | candidates_considered | integer not null default 0 | |
-| emails_sent | integer not null default 0 | |
-| emails_skipped | integer not null default 0 | |
-| emails_failed | integer not null default 0 | |
 | error_message | text nullable | |
 | metadata | jsonb not null default '{}' | |
 
 **Indexes:** `(job_name, started_at desc)`.
 
-### 3.9 Relationships (summary)
+### 3.8 Relationships (summary)
 
 - `users 1—1 teacher_profiles` (only when role = teacher)
 - `users 1—N teacher_documents`
@@ -254,10 +215,7 @@ One row per cron tick. Lets admins see when the job ran, what it processed, and 
 - `users 1—N teacher_documents` via `reviewed_by` (admin only)
 - `teacher_documents 0—1 teacher_documents` via `superseded_by` (renewal chain)
 - `users 1—N audit_logs` via `actor_id`
-- `users 1—N notification_logs` via `teacher_id`
-- `teacher_documents 1—N notification_logs` via `teacher_document_id`
-- `users 1—N notification_logs` via `actor_id` (manual admin sends)
-- `reminder_settings` — singleton, no FKs
+- `email_settings` — singleton, no FKs
 
 ---
 
@@ -348,7 +306,7 @@ This is the **only** approved login flow. No public sign-up exists. There is no 
 1. **Admin creates the teacher.** Admin goes to `/admin/teachers/new`, enters the teacher's name + email, optional profile fields. Server-side:
    - Creates a `users` row with `role = 'teacher'` and `email_verified_at = null`.
    - Creates the matching `teacher_profiles` row.
-   - Sends an **invite email** containing a magic-link login URL (generated by Auth.js). The email body follows the §11.3 privacy rules (no file data, single CTA = log in).
+   - Sends an **invite email** containing a magic-link login URL (generated by Auth.js). The email body carries no file data and a single CTA = log in.
    - Writes an `audit_logs` row (`action = 'user.invite'`).
 2. **Initial admin** is seeded via the Phase 1 seed script and migration — never via UI. To add additional admins, an existing admin uses a CLI seed (out of MVP UI scope).
 3. **Teachers cannot self-register.** The `/login` page accepts an email; if no `users` row exists, the response is generic ("If that address is on file, a link has been sent") to prevent email enumeration.
@@ -395,7 +353,7 @@ A teacher hitting any `/admin/**` or `/api/admin/**` URL receives **403**, not a
 
 - The Supabase URL, bucket name, or storage path of any file (their own or others').
 - Any admin route's response — middleware short-circuits with 403 before the route runs.
-- Any other teacher's profile, documents, audit entries, or notification logs.
+- Any other teacher's profile, documents, or audit entries.
 
 ---
 
@@ -406,11 +364,11 @@ A teacher hitting any `/admin/**` or `/api/admin/**` URL receives **403**, not a
 ### Phase 1 — Foundation: auth / database / storage
 - Next.js + TS + Tailwind + shadcn/ui scaffold
 - **Supabase project provisioned** (or local Postgres via Docker for dev); connection string in `.env`
-- Drizzle config pointed at Supabase Postgres; initial migration creating all **8** tables from §3
+- Drizzle config pointed at Supabase Postgres; initial migration creating all **7** tables from §3
 - Auth.js v5 with Drizzle adapter, email magic link, role on user, login page, logout, role-based redirect callback (see §5.6)
 - Middleware: session gate + role gate (per §5.6 table)
 - Storage adapter with two implementations: `local` (dev) and `supabase` (prod, private bucket); upload + download routes scaffolded as 501 stubs (not yet wired to UI)
-- Seed script: 1 admin user, 3 sample `document_types`, 1 `reminder_settings` row with defaults
+- Seed script: 1 admin user, 3 sample `document_types`, 1 `email_settings` row with defaults
 - `.env.example` documents: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `EMAIL_SERVER` (Resend or SMTP), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `STORAGE_DRIVER` (`local` \| `supabase`), `CRON_SECRET`
 - `README.md`, CI: typecheck + lint
 
@@ -431,7 +389,6 @@ A teacher hitting any `/admin/**` or `/api/admin/**` URL receives **403**, not a
 ### Phase 4 — Renewal / expiration tracking
 - Approval sets `expires_at = reviewed_at + renewal_months`
 - Cron route `POST /api/cron/expiry` (shared-secret header): marks docs `expired` when `expires_at < now()`
-- Email reminders at 30 / 14 / 7 days before expiry
 - Teacher re-upload supersedes prior approved doc (sets `superseded_by`)
 - "Expiring soon" badge on teacher dashboard and admin views
 
@@ -443,16 +400,6 @@ A teacher hitting any `/admin/**` or `/api/admin/**` URL receives **403**, not a
 - Security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
 - Full test suite (§10)
 - Production deploy docs
-
-### Phase 6 — Automated email reminder system (see §11)
-- Reminder dispatch cron route `POST /api/cron/reminders` (shared-secret header)
-- Email templates for all `reminder_type` values, plain-text + minimal HTML, privacy-safe (§11.3)
-- Duplicate-prevention via `notification_logs.milestone_key` UNIQUE constraint + daily cap
-- Admin UI at `/admin/reminders`: settings, template preview, log viewer, manual send, failed/skipped views
-- `scheduled_job_runs` populated by both expiry and reminder crons
-- Tests in §11.8
-
-> Phase 1 ships the `reminder_settings`, `notification_logs`, and `scheduled_job_runs` schema placeholders + seed row only. No reminder logic in Phase 1.
 
 ---
 
@@ -535,11 +482,10 @@ A teacher hitting any `/admin/**` or `/api/admin/**` URL receives **403**, not a
 
 ### Branch: `feature/renewal-tracking` (Phase 4)
 
-- **Agent responsibility:** Expiry calculation, cron, email reminders, renewal supersession.
+- **Agent responsibility:** Expiry calculation, cron, renewal supersession.
 - **Files likely touched:**
   - `app/api/cron/expiry/route.ts`
   - `lib/expiry/*`
-  - `lib/email/*`
   - `vercel.json` (or equivalent cron config)
   - Tiny additions to `lib/db/queries/teacher-documents.ts` and `lib/db/queries/admin-review.ts` to handle `superseded_by` (coordinate via PR)
 - **Files to avoid:**
@@ -551,8 +497,7 @@ A teacher hitting any `/admin/**` or `/api/admin/**` URL receives **403**, not a
   1. Approval correctly sets `expires_at`
   2. Cron run with shared secret marks past-due `approved` docs as `expired`; without secret → 401
   3. Teacher re-upload of an expired doc sets `superseded_by` on the new doc pointing to ... no — on the old doc pointing to the new (per §3.4). Verify direction in implementation.
-  4. Reminder emails fire at 30 / 14 / 7 days before `expires_at` and are idempotent (no duplicates within a window)
-  5. "Expiring soon" badge appears within 30 days of `expires_at`
+  4. "Expiring soon" badge appears within 30 days of `expires_at`
 
 ### Branch: `feature/security-tests-docs` (Phase 5)
 
@@ -576,38 +521,6 @@ A teacher hitting any `/admin/**` or `/api/admin/**` URL receives **403**, not a
   4. Response headers include HSTS, CSP, X-Frame-Options=DENY, X-Content-Type-Options=nosniff, Referrer-Policy=strict-origin-when-cross-origin
   5. All tests in §10 pass in CI
 
-### Branch: `feature/email-reminders` (Phase 6)
-
-- **Agent responsibility:** Build the entire automated email reminder system per §11 — cron, dispatch logic, templates, duplicate prevention, admin UI, logging.
-- **Files likely touched:**
-  - `app/api/cron/reminders/route.ts`
-  - `lib/reminders/*` (dispatcher, milestone calculator, priority resolver, daily-cap check, idempotency key builder)
-  - `lib/email/templates/*` (one file per `reminder_type`, plain-text + minimal HTML)
-  - `lib/email/send.ts` (provider adapter wrapping Resend / SMTP)
-  - `lib/db/queries/notification-logs.ts`, `lib/db/queries/reminder-settings.ts`, `lib/db/queries/job-runs.ts`
-  - `app/(admin)/reminders/page.tsx`, `app/(admin)/reminders/settings/page.tsx`, `app/(admin)/reminders/logs/page.tsx`
-  - `app/api/admin/reminders/settings/route.ts`, `app/api/admin/reminders/manual/route.ts`, `app/api/admin/reminders/preview/route.ts`
-  - `components/admin/reminders/*`
-  - `tests/unit/reminders/*`, `tests/integration/reminders/*`, `tests/e2e/reminders.spec.ts`
-- **Files to avoid:**
-  - `lib/db/schema.ts` — `reminder_settings`, `notification_logs`, and `scheduled_job_runs` already exist from Phase 1. Do NOT migrate.
-  - `middleware.ts`, `lib/auth/*`
-  - `app/(teacher)/**` (no teacher-facing UI changes for reminders — teachers receive emails, that's it)
-  - `lib/storage/*` — reminders MUST NOT touch storage
-  - `app/api/upload/route.ts`, `app/api/files/[id]/route.ts`
-- **Dependencies:** Phases 1–4 merged. (Phase 5 is independent and may run in parallel.)
-- **Acceptance criteria:**
-  1. Cron POST with shared secret runs `reminder_dispatch` and writes one `scheduled_job_runs` row with accurate counts; without secret → 401
-  2. UNIQUE `(teacher_id, milestone_key)` constraint prevents duplicate milestone sends across reruns
-  3. Daily cap honored: teacher with multiple eligible reminders gets one `sent` and the rest `skipped(daily_cap)`
-  4. Master toggle off → all candidates logged `skipped(reminders_disabled)`, zero provider calls
-  5. Outgoing email payload (asserted via mock provider): zero attachments, zero storage URLs, zero file paths, zero cross-teacher data; single CTA links to `reminder_settings.portal_url`
-  6. Admin can edit settings, preview each template, view logs (filterable), manually send, and see failed sends
-  7. Manual send bypasses daily cap and writes `triggered_by='admin_manual'` + `actor_id`
-  8. Post-expiration cadence: doc expired N days ago with no replacement triggers exactly one reminder per `post_expiration_interval_days` window
-  9. Renewal stops the chain: once a new doc is uploaded AND approved, no further `expired_recurring` for the prior doc
-  10. All §11.8 tests pass
-
 ---
 
 ## 8. Safety Rules for All Agents
@@ -625,9 +538,7 @@ A teacher hitting any `/admin/**` or `/api/admin/**` URL receives **403**, not a
 11. **Do not overbuild.** No HR, payroll, student records, gradebooks, messaging, calendars, multi-tenancy, or public registration. If a feature isn't in §6, do not build it.
 12. **Do not add dependencies unilaterally.** `package.json` changes require a coordination PR.
 13. **Do not bypass the audit helper.** All admin mutations and all file downloads call `lib/audit/log.ts`.
-14. **Reminder emails never carry files or links to files.** No attachments, no signed URLs, no storage paths, no other teacher's data. Single CTA = portal login. See §11.3.
-15. **Reminder dispatch goes through the dispatcher.** All sends — automated and manual — go through `lib/reminders/dispatch.ts` which enforces idempotency + daily cap + logging. No ad-hoc `sendEmail()` calls from feature code.
-16. **Local storage adapter is dev-only.** Production deploys MUST use private object storage (S3 / R2 / Supabase Storage). See §11.7.
+14. **Local storage adapter is dev-only.** Production deploys MUST use private object storage (S3 / R2 / Supabase Storage).
 
 ---
 
@@ -637,9 +548,8 @@ A phase is **not** complete until every item below is demonstrated on the branch
 
 ### Phase 1 DoD
 - Repo builds clean (`pnpm typecheck`, `pnpm lint`, `pnpm build`) with zero errors
-- All 8 tables exist after `pnpm db:migrate` (users, teacher_profiles, document_types, teacher_documents, audit_logs, reminder_settings, notification_logs, scheduled_job_runs)
-- Seed creates 1 admin + 3 doc types + 1 `reminder_settings` row with documented defaults
-- UNIQUE constraint on `notification_logs (teacher_id, milestone_key)` is in place
+- All 7 tables exist after `pnpm db:migrate` (users, teacher_profiles, document_types, teacher_documents, audit_logs, email_settings, scheduled_job_runs)
+- Seed creates 1 admin + 3 doc types + 1 `email_settings` row with documented defaults
 - Login works for seeded admin; role-based redirect verified
 - Middleware blocks `/admin/**` for teachers and unauthenticated users
 - `.env.example` documents every required env var
@@ -664,7 +574,6 @@ A phase is **not** complete until every item below is demonstrated on the branch
 - Approval correctly sets `expires_at = reviewed_at + renewal_months`
 - Renewal supersession chain correct (`superseded_by` populated)
 - Expiring badge appears in both teacher and admin views
-- (Reminder emails are NOT in this phase — see Phase 6)
 
 ### Phase 5 DoD
 - CSV export matches DB counts
@@ -673,16 +582,6 @@ A phase is **not** complete until every item below is demonstrated on the branch
 - Security headers present on every response
 - All §10 tests pass in CI
 - Deploy + security docs complete
-
-### Phase 6 DoD
-- Reminder cron with shared secret produces one `scheduled_job_runs` row per run with accurate counts; without secret → 401
-- Each `reminder_type` template renders correctly in admin preview, plain-text + HTML, with zero attachments and zero storage URLs
-- Milestone idempotency: rerunning cron same day produces zero new `sent` rows for already-sent milestones
-- Daily cap enforced: extras logged `skipped(daily_cap)` with the highest-priority send winning
-- Master toggle off → zero provider calls, all candidates logged `skipped(reminders_disabled)`
-- Privacy assertions pass in tests: no attachments, no storage URLs, no cross-teacher fields, no auth-bypass tokens in body
-- Admin can edit settings, preview templates, view filtered logs, manually send, and see failed sends
-- All §11.8 tests pass in CI
 
 ---
 
@@ -735,158 +634,29 @@ A phase is **not** complete until every item below is demonstrated on the branch
 
 ---
 
-## 11. Automated Email Reminder System
-
-The portal sends scheduled, privacy-safe email reminders to teachers about their documents. This system is **a separate phase (Phase 6)** built after the core upload / review / expiration flow is working. Phase 1 only seeds harmless schema placeholders so later phases don't require schema rebuilds.
-
-### 11.1 Reminder use cases
-
-| # | Reminder type | Trigger condition |
-|---|---|---|
-| 1 | **Missing required document** | Teacher has no `teacher_documents` row (or no current non-superseded row) for an `active`, `required` `document_type`. Cadence: every `missing_doc_reminder_interval_days` (default 14), capped to one per teacher per day. |
-| 2 | **Rejected document needs replacement** | Most recent doc for a required type has `status = 'rejected'` and no newer upload exists. Cadence: every `rejected_doc_reminder_interval_days` (default 7) until teacher uploads a replacement. |
-| 3 | **Document expiring soon** | `status = 'approved'` AND `expires_at` falls on a milestone day (default 90, 60, 30, 14, 7 days from now). Each milestone fires at most once per document. |
-| 4 | **Document expired** | `status = 'expired'` (just transitioned today). Send "expired today" reminder once. |
-| 5 | **Expired — still not renewed** | `status = 'expired'` AND more than `post_expiration_interval_days` (default 7) have passed since the last reminder. Continue every interval until a new doc is uploaded AND approved (then chain stops automatically because new doc is `pending` or `approved`). |
-| 6 | **Pending too long (admin alert)** | If `pending_review_days_before_admin_alert` is set and a `pending` doc is older than that threshold, send an alert to admin (not the teacher). Cadence: once per (admin, document). |
-
-### 11.2 Default schedule
-
-Reminders for **expiring approved documents** fire on these milestones, calculated as `expires_at - N days`:
-
-- 90 days before expiration
-- 60 days before expiration
-- 30 days before expiration
-- 14 days before expiration
-- 7 days before expiration
-- **On the expiration date** (the "expired today" reminder)
-- **Every 7 days after expiration** until the teacher has uploaded a replacement AND the replacement has been approved
-
-All milestone values are read from `reminder_settings`. Defaults above ship in the seed migration.
-
-### 11.3 Privacy-safe email rules (non-negotiable)
-
-1. **Never attach paperwork.** No PDF, image, or any binary in the email.
-2. **No public file links.** Emails MUST NOT contain S3 / R2 / Supabase URLs, signed URLs, or any direct storage path.
-3. **No private storage paths.** No `storage_key`, no UUID file paths, no internal IDs that map to files. Emails reference document types by their public `name` only (e.g. "Teaching Credential"), never by storage key.
-4. **No other teacher's data.** Emails only reference the recipient's own documents. Multi-recipient sends are forbidden.
-5. **General wording only.** "Your Teaching Credential expires on 2026-09-01. Please log in to the portal to upload a renewal." Do NOT include extracted document contents, OCR text, original filenames, reviewer names, or rejection reasons that contain PII — sanitize rejection reasons before including, or simply say "An item needs attention; log in to see details."
-6. **Single CTA: log in.** The email contains exactly one action: a link to `reminder_settings.portal_url` (the portal login page). No deep links that bypass auth.
-7. **Authentication is not bypassed by email.** Magic-link auth (used for login) is sent separately by Auth.js and is single-use, short-lived, and unrelated to reminders. Reminder emails MUST NOT embed any authentication token, session, or signed bypass link.
-8. **No third-party tracking pixels** or click-trackers that leak document state to external services.
-9. **Plain-text + minimal HTML.** Both parts. No external image hosts.
-10. **Footer must include:** school name, an "if you received this in error" line, and the portal URL again as plain text.
-
-### 11.4 Duplicate-prevention rules
-
-The system MUST NOT spam teachers. Enforced by `notification_logs.milestone_key` UNIQUE per `(teacher_id, milestone_key)` and an in-process daily-cap check before send.
-
-1. **At most one email per (teacher, milestone).** `milestone_key` examples:
-   - `expiring_30:{teacher_document_id}`
-   - `expired_today:{teacher_document_id}`
-   - `expired_recurring:{teacher_document_id}:{YYYY-MM-DD}` (the date encodes the 7-day cadence)
-   - `missing_required:{user_id}:{document_type_id}:{YYYY-MM-DD-of-cadence-bucket}`
-   - `rejected_replace:{teacher_document_id}:{YYYY-MM-DD-of-cadence-bucket}`
-2. **At most one automated reminder per teacher per day** when `max_one_email_per_teacher_per_day = true` (default). If multiple reminders would qualify on the same day, send the highest-priority one and log the rest as `skipped` with `skipped_reason = 'daily_cap'`.
-3. **Manual admin sends override the daily cap** but still write a `notification_logs` row with `triggered_by = 'admin_manual'` and `actor_id = <admin>`.
-4. **Skipped reminders are always logged** with a `skipped_reason`. Common reasons: `daily_cap`, `duplicate_milestone`, `reminders_disabled`, `no_email_on_file`, `teacher_inactive`.
-5. **Send order priority** (when daily cap forces a choice): `expired_today` > `expired_recurring` > `expiring_7` > `expiring_14` > `expiring_30` > `expiring_60` > `expiring_90` > `rejected_replace` > `missing_required` > `pending_admin_alert`.
-6. **Idempotent cron.** Re-running the cron in the same day must not produce duplicate sends.
-
-### 11.5 Admin controls
-
-Admin UI under `/admin/reminders` (added in Phase 6) provides:
-
-1. **Master toggle** — flip `reminder_settings.enabled` on/off. When off, the cron still runs but logs everything as `skipped` with reason `reminders_disabled`.
-2. **Edit settings** — sender name/email, portal URL, milestone day list, post-expiration interval, daily cap toggle, admin-alert threshold.
-3. **Preview email templates** — render each `reminder_type` against a sample teacher/document (no send). Templates live in `lib/email/templates/*`.
-4. **Notifications log viewer** — paginated `notification_logs` filtered by status, type, teacher, date.
-5. **Manual send** — for a chosen teacher + reminder type, send immediately. Bypasses daily cap, still logs.
-6. **Failed sends view** — quick filter on `status = 'failed'` with provider error message.
-7. **Job runs view** — `scheduled_job_runs` history with counts and any error.
-
-All admin reminder actions write an `audit_logs` row (e.g. `reminders.settings.update`, `reminders.manual_send`, `reminders.toggle`).
-
-### 11.6 Build order placement
-
-Email reminders are **Phase 6**. Prerequisites that must be on `main` first:
-
-1. Auth works (Phase 1)
-2. `teacher_profiles` exist (Phase 1)
-3. `document_types` exist and are admin-managed (Phases 1 + 3)
-4. Upload + review flow works (Phases 2 + 3)
-5. `expires_at` is calculated correctly on approval (Phase 4)
-
-**Phase 1 ships only the schema placeholders** for `reminder_settings`, `notification_logs`, and `scheduled_job_runs` (so later phases don't need a schema-rebuild migration) plus a seed row in `reminder_settings` with defaults. **No reminder logic, no email sending, no admin UI** in Phase 1.
-
-### 11.7 Production note (storage)
-
-Phase 1 uses a **local disk storage adapter for development only.** A deployment must not run with the local adapter. Production MUST use private object storage (S3, Cloudflare R2, Supabase Storage, or equivalent) with:
-
-- Block Public Access enabled
-- No `public-read` ACLs on any object
-- All reads served exclusively through `/api/files/[id]` after auth + ownership checks
-- Bucket credentials in environment variables, never committed
-- Server-side encryption at rest (provider default acceptable; KMS preferred)
-
-The reminder system reinforces this rule: emails NEVER carry file content or storage URLs (§11.3). The only way to view a document is to log in to the portal.
-
-### 11.8 Test additions for Phase 6
-
-| Test | Asserts |
-|---|---|
-| Milestone idempotency | Running cron twice in one day produces exactly one `sent` row per milestone |
-| Daily cap | Teacher with 5 eligible reminders on the same day receives 1 send + 4 `skipped(daily_cap)` rows |
-| Disabled master switch | `enabled = false` → every candidate logged as `skipped(reminders_disabled)`, zero sends |
-| Privacy: no attachments | Outgoing email payload has zero attachments and zero storage URLs (assert via mock provider) |
-| Privacy: no cross-teacher data | Reminder body rendered for teacher A never contains any field from teacher B |
-| Manual override | Admin manual send bypasses daily cap, writes `triggered_by='admin_manual'` and `actor_id` |
-| Post-expiration cadence | Doc expired 8 days ago with no replacement → reminder sent today; doc expired 6 days ago → skipped(duplicate) |
-| Renewal stops the chain | New upload + approval cancels future `expired_recurring` sends for that doc |
-
----
-
 # Summary (latest update)
 
-## What changed in this revision
+## Scope summary
 
-Added the **Automated Email Reminder System** as a first-class, governed feature of the portal. Specifically:
+The portal is the five-phase MVP described above: auth + schema + storage foundation, teacher dashboard + upload, admin review + doc-type management, renewal / expiration tracking, and security + reports + tests + docs. Notable points:
 
-- **§2 Approved Architecture** — clarified that local storage is dev-only; production MUST use private object storage (S3 / R2 / Supabase Storage).
-- **§3 Data Model** — table count grew from 5 to **8**. Added:
-  - **§3.6 `reminder_settings`** — singleton config row with milestone defaults, daily-cap toggle, sender info, portal URL.
-  - **§3.7 `notification_logs`** — append-only per-send log with UNIQUE `(teacher_id, milestone_key)` for idempotency, status enum, skipped reasons, manual-vs-cron source.
-  - **§3.8 `scheduled_job_runs`** — per-cron-tick visibility for admins.
-  - **§3.9 Relationships** — updated with the new tables.
-- **§6 MVP Build Order** — added **Phase 6 — Automated Email Reminders** as the last phase. Phase 1 only ships the schema placeholders + a seeded `reminder_settings` row; no reminder logic, no email sending.
-- **§7 Multi-Agent Branch Plan** — added **`feature/email-reminders`** with full responsibility, file ownership, dependencies, and 10 acceptance criteria.
-- **§8 Safety Rules** — added rules 14–16: no files/links in reminder emails, all sends go through the single dispatcher, local storage adapter is dev-only.
-- **§9 Definition of Done** — Phase 1 DoD now requires 8 tables + reminder_settings seed + the UNIQUE constraint. Phase 4 DoD scrubbed of reminder-email language (moved to Phase 6). Added a full **Phase 6 DoD**.
-- **§11 Automated Email Reminder System** (NEW) — complete spec:
-  - 11.1 six reminder use cases
-  - 11.2 default schedule (90/60/30/14/7 days before + on expiration + every 7 days after)
-  - 11.3 ten privacy-safe email rules
-  - 11.4 duplicate-prevention rules with milestone-key idempotency and priority ordering
-  - 11.5 admin controls (toggle, settings, preview, log viewer, manual send, failed view, job runs)
-  - 11.6 build-order placement (Phase 6, after Phases 1–4)
-  - 11.7 production storage note
-  - 11.8 eight reminder-specific tests
+- **§2 Approved Architecture** — local storage is dev-only; production MUST use private object storage (S3 / R2 / Supabase Storage).
+- **§3 Data Model** — **7 tables**: `users`, `teacher_profiles`, `document_types`, `teacher_documents`, `audit_logs`, `email_settings` (outbound-mail sender identity for invites), and `scheduled_job_runs` (daily expiry-sweep telemetry).
+- **§6 MVP Build Order** — five sequential phases; Phases 2/3 can run in parallel.
+- **§7 Multi-Agent Branch Plan** — one feature branch per phase with disjoint file ownership.
+- **§8 Safety Rules** — branch discipline, server-side enforcement, audit-everything, no public file links, dev-only local storage.
 
 ## Is the foundation branch ready to start?
 
-**Yes.** The spec is now complete enough for `feature/auth-database-storage` to begin. The Phase 1 scope grew slightly: the foundation must now create **8 tables** instead of 5, seed **1 `reminder_settings` row** with documented defaults, and add the UNIQUE constraint on `notification_logs (teacher_id, milestone_key)`. No reminder logic, no email provider integration, no admin reminder UI in Phase 1 — only schema placeholders.
-
-## Did any earlier tables/schema change?
-
-**No existing table was modified.** All five original tables (`users`, `teacher_profiles`, `document_types`, `teacher_documents`, `audit_logs`) are unchanged in shape. Three new tables were added (`reminder_settings`, `notification_logs`, `scheduled_job_runs`). Because they ship in the initial migration in Phase 1, no later phase needs a schema rebuild — Phase 6 can be pure application code on top of a stable schema.
+**Yes.** The spec is complete enough for `feature/auth-database-storage` to begin. The foundation creates **7 tables**, seeds **1 admin user, 3 sample `document_types`, and 1 `email_settings` row** with documented defaults.
 
 ## What should be built first
 
 **Phase 1 foundation on branch `feature/auth-database-storage`.** Concretely:
 
 1. Next.js 15 + TypeScript + Tailwind + shadcn/ui scaffold
-2. Drizzle config + initial migration creating all **8** tables with constraints and indexes from §3
-3. Seed: 1 admin user, 3 sample `document_types`, 1 `reminder_settings` row with defaults
+2. Drizzle config + initial migration creating all **7** tables with constraints and indexes from §3
+3. Seed: 1 admin user, 3 sample `document_types`, 1 `email_settings` row with defaults
 4. Auth.js v5 with email magic link, role on user, login page, logout
 5. Middleware enforcing session + role gating
 6. Local storage adapter, with `/api/upload` and `/api/files/[id]` stubbed (501) so downstream branches have stable import paths

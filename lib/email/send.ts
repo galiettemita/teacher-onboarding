@@ -25,11 +25,10 @@
  *  - When EMAIL_PROVIDER=resend or sendgrid, the matching API key MUST be
  *    set; we throw on first use if it's missing. No silent fallback to
  *    console — that's how production goes silent.
- *  - The `from` field is built server-side from `reminder_settings`, NOT
- *    accepted from the caller. The dispatcher takes a `from` field only
- *    because `reminder_settings` is the only thing that legitimately
- *    knows the verified sender for the deployment; the dispatcher then
- *    re-sanitises it.
+ *  - The `from` field is built server-side from `email_settings`, NOT
+ *    accepted from the caller. Callers pass a `from` field only because
+ *    `email_settings` is the only thing that legitimately knows the
+ *    verified sender for the deployment; `sendEmail` then re-sanitises it.
  *
  * Cited platform docs:
  *   Resend Send API — https://resend.com/docs/api-reference/emails/send-email
@@ -53,8 +52,8 @@ import {
 /**
  * The payload contract. Deliberately narrow:
  *  - `to`: single string only (no array). The type forbids lists.
- *  - `from`: { name, email } — built by the dispatcher's caller from
- *    `reminder_settings`. Never user-controlled.
+ *  - `from`: { name, email } — built by the caller from
+ *    `email_settings`. Never user-controlled.
  *  - `subject`, `text`, `html` as expected.
  *  - No `cc`, `bcc`, `replyTo`, `attachments`, `headers`.
  *
@@ -124,11 +123,11 @@ function readSendGridApiKey(): string {
 
 /**
  * Console provider — prints the payload to stdout. The output is
- * structured (one JSON line per send) so the smoke script can grep it
+ * structured (one JSON line per send) so logs can be grepped
  * deterministically.
  *
  * Returns immediately with a synthetic providerId so callers can record
- * "we processed this" in `notification_logs` regardless of provider.
+ * "we processed this" regardless of provider.
  */
 function sendViaConsole(msg: EmailMessage): SendResult {
   const id = `console-${crypto.randomUUID()}`;
@@ -153,8 +152,7 @@ function sendViaConsole(msg: EmailMessage): SendResult {
  *
  * Errors are surfaced as `{ ok: false, error }` with a SANITISED message
  * — we strip the API key from any echo, and we cap the length. The
- * caller (`dispatcher.ts`) writes this string into
- * `notification_logs.failed_reason` so it must be safe to persist.
+ * caller may surface or persist this string, so it must be safe.
  */
 async function sendViaResend(msg: EmailMessage): Promise<SendResult> {
   const apiKey = readResendApiKey();

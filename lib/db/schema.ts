@@ -10,7 +10,6 @@ import {
   date,
   jsonb,
   check,
-  uniqueIndex,
   index,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -123,71 +122,22 @@ export const auditLogs = pgTable(
   })
 );
 
-// ---------- reminder_settings ----------
-export const reminderSettings = pgTable("reminder_settings", {
+// ---------- email_settings ----------
+// Singleton row holding the deployment's verified outbound-mail identity
+// (sender display name, `from` address, portal URL). Read by the
+// teacher-invite flow to build the `from` header and login link.
+export const emailSettings = pgTable("email_settings", {
   id: uuid("id").primaryKey().default(sql`'00000000-0000-0000-0000-000000000001'::uuid`),
-  enabled: boolean("enabled").notNull().default(true),
   senderName: text("sender_name").notNull().default("Onboarding Portal"),
   senderEmail: text("sender_email").notNull().default("noreply@example.com"),
   portalUrl: text("portal_url").notNull().default("http://localhost:3000"),
-  reminderDaysBeforeExpiration: integer("reminder_days_before_expiration")
-    .array()
-    .notNull()
-    .default(sql`'{90,60,30,14,7}'::int[]`),
-  postExpirationIntervalDays: integer("post_expiration_interval_days").notNull().default(7),
-  maxOneEmailPerTeacherPerDay: boolean("max_one_email_per_teacher_per_day")
-    .notNull()
-    .default(true),
-  pendingReviewDaysBeforeAdminAlert: integer("pending_review_days_before_admin_alert"),
-  missingDocReminderIntervalDays: integer("missing_doc_reminder_interval_days")
-    .notNull()
-    .default(14),
-  rejectedDocReminderIntervalDays: integer("rejected_doc_reminder_interval_days")
-    .notNull()
-    .default(7),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- notification_logs ----------
-export const notificationLogs = pgTable(
-  "notification_logs",
-  {
-    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    teacherId: uuid("teacher_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
-    teacherDocumentId: uuid("teacher_document_id").references(() => teacherDocuments.id, {
-      onDelete: "restrict",
-    }),
-    documentTypeId: uuid("document_type_id").references(() => documentTypes.id, {
-      onDelete: "restrict",
-    }),
-    reminderType: text("reminder_type").notNull(),
-    milestoneKey: text("milestone_key").notNull(),
-    recipientEmail: text("recipient_email").notNull(),
-    subject: text("subject").notNull(),
-    status: text("status").notNull(),
-    providerMessageId: text("provider_message_id"),
-    sentAt: timestamp("sent_at", { withTimezone: true }),
-    failedReason: text("failed_reason"),
-    skippedReason: text("skipped_reason"),
-    triggeredBy: text("triggered_by").notNull(),
-    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    uniqueMilestone: uniqueIndex("notification_logs_milestone_uq").on(
-      t.teacherId,
-      t.milestoneKey
-    ),
-    byTeacher: index("notification_logs_teacher_idx").on(t.teacherId, t.createdAt),
-    byStatus: index("notification_logs_status_idx").on(t.status, t.createdAt),
-    byType: index("notification_logs_type_idx").on(t.reminderType, t.createdAt),
-  })
-);
-
 // ---------- scheduled_job_runs ----------
+// Telemetry for cron jobs (currently the daily expiry sweep): one row per
+// invocation with start/finish, status, and a candidate count.
 export const scheduledJobRuns = pgTable(
   "scheduled_job_runs",
   {
@@ -197,9 +147,6 @@ export const scheduledJobRuns = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     status: text("status").notNull(),
     candidatesConsidered: integer("candidates_considered").notNull().default(0),
-    emailsSent: integer("emails_sent").notNull().default(0),
-    emailsSkipped: integer("emails_skipped").notNull().default(0),
-    emailsFailed: integer("emails_failed").notNull().default(0),
     errorMessage: text("error_message"),
     metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
   },

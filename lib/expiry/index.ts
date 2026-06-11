@@ -6,9 +6,4 @@ export {
   type UiStatus,
   type DeriveOpts,
 } from "./status";
-export {
-  listExpiring,
-  listExpired,
-  listExpiredWithoutReplacement,
-} from "./queries";
 export { linkSupersession } from "./supersession";

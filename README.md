@@ -4,8 +4,7 @@ A simple, grandma-friendly elementary school teacher onboarding paperwork portal
 
 > **Status:** Phases 1–5 merged. Auth, schema, storage, teacher upload, admin
 > review, renewal tracking, CSV reports, audit-log viewer, rate limiting,
-> security headers, full test suite. Phase 6 (email reminders) is intentionally
-> deferred.
+> security headers, full test suite.
 
 See [`PROJECT_CONTEXT.md`](./PROJECT_CONTEXT.md) for the full architecture and
 rules. That document is the source of truth. For deployment see
@@ -27,11 +26,6 @@ response, [`docs/SECURITY.md`](./docs/SECURITY.md).
   renewal_months`. A daily cron sweeps past-due `approved` docs to
   `expired`. A new upload after expiry creates a fresh row and links the
   old one via `superseded_by`.
-- **Automated email reminders**: a second daily cron sends privacy-safe
-  reminders to teachers about missing, rejected, expiring (90/60/30/14/7
-  days out), and expired documents. UNIQUE-index idempotency, daily
-  per-teacher cap, master on/off toggle, full admin UI under
-  `/admin/reminders` (settings, logs, preview, manual send).
 - **Security**: rate limits on `/api/auth/**`, `/api/upload`, `/api/files/**`;
   HSTS / CSP / X-Frame-Options / no-sniff / Referrer-Policy /
   Permissions-Policy on every response; every admin mutation and file
@@ -96,7 +90,7 @@ Change these immediately in any shared environment.
 | `LOCAL_STORAGE_DIR` | Local file directory (default `./.uploads`). |
 | `CRON_SECRET` | Shared secret for `/api/cron/expiry`. |
 | `EXPIRING_SOON_WINDOW_DAYS` | Optional. Integer days (default 30). |
-| `EMAIL_PROVIDER` | Optional. `console` (default), `resend`, or `sendgrid` for automatic emails. |
+| `EMAIL_PROVIDER` | Optional. `console` (default), `resend`, or `sendgrid` for outbound invite emails. |
 | `RESEND_API_KEY` / `SENDGRID_API_KEY` | Required only when using that email provider. Server-only; never `NEXT_PUBLIC_`. |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Used by `pnpm db:seed`. |
 

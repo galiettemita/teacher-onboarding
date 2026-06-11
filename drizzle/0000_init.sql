@@ -87,58 +87,25 @@ CREATE INDEX IF NOT EXISTS "audit_logs_target_idx"
 CREATE INDEX IF NOT EXISTS "audit_logs_action_idx"
     ON "audit_logs" ("action", "created_at" DESC);
 
--- ---------- reminder_settings (singleton) ----------
-CREATE TABLE IF NOT EXISTS "reminder_settings" (
+-- ---------- email_settings (singleton) ----------
+-- The deployment's verified outbound-mail identity. Read by the
+-- teacher-invite flow to build the `from` header and login link.
+CREATE TABLE IF NOT EXISTS "email_settings" (
     "id" uuid PRIMARY KEY DEFAULT '00000000-0000-0000-0000-000000000001' NOT NULL,
-    "enabled" boolean NOT NULL DEFAULT true,
     "sender_name" text NOT NULL DEFAULT 'Onboarding Portal',
     "sender_email" text NOT NULL DEFAULT 'noreply@example.com',
     "portal_url" text NOT NULL DEFAULT 'http://localhost:3000',
-    "reminder_days_before_expiration" integer[] NOT NULL DEFAULT '{90,60,30,14,7}'::int[],
-    "post_expiration_interval_days" integer NOT NULL DEFAULT 7,
-    "max_one_email_per_teacher_per_day" boolean NOT NULL DEFAULT true,
-    "pending_review_days_before_admin_alert" integer,
-    "missing_doc_reminder_interval_days" integer NOT NULL DEFAULT 14,
-    "rejected_doc_reminder_interval_days" integer NOT NULL DEFAULT 7,
     "created_at" timestamptz NOT NULL DEFAULT now(),
     "updated_at" timestamptz NOT NULL DEFAULT now()
 );
 
 -- Seed the singleton row (idempotent).
-INSERT INTO "reminder_settings" ("id")
+INSERT INTO "email_settings" ("id")
 VALUES ('00000000-0000-0000-0000-000000000001')
 ON CONFLICT ("id") DO NOTHING;
 
--- ---------- notification_logs ----------
-CREATE TABLE IF NOT EXISTS "notification_logs" (
-    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-    "teacher_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE RESTRICT,
-    "teacher_document_id" uuid REFERENCES "teacher_documents"("id") ON DELETE RESTRICT,
-    "document_type_id" uuid REFERENCES "document_types"("id") ON DELETE RESTRICT,
-    "reminder_type" text NOT NULL,
-    "milestone_key" text NOT NULL,
-    "recipient_email" text NOT NULL,
-    "subject" text NOT NULL,
-    "status" text NOT NULL,
-    "provider_message_id" text,
-    "sent_at" timestamptz,
-    "failed_reason" text,
-    "skipped_reason" text,
-    "triggered_by" text NOT NULL,
-    "actor_id" uuid REFERENCES "users"("id") ON DELETE SET NULL,
-    "created_at" timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS "notification_logs_milestone_uq"
-    ON "notification_logs" ("teacher_id", "milestone_key");
-CREATE INDEX IF NOT EXISTS "notification_logs_teacher_idx"
-    ON "notification_logs" ("teacher_id", "created_at" DESC);
-CREATE INDEX IF NOT EXISTS "notification_logs_status_idx"
-    ON "notification_logs" ("status", "created_at" DESC);
-CREATE INDEX IF NOT EXISTS "notification_logs_type_idx"
-    ON "notification_logs" ("reminder_type", "created_at" DESC);
-
 -- ---------- scheduled_job_runs ----------
+-- Telemetry for cron jobs (currently the daily expiry sweep).
 CREATE TABLE IF NOT EXISTS "scheduled_job_runs" (
     "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
     "job_name" text NOT NULL,
@@ -146,9 +113,6 @@ CREATE TABLE IF NOT EXISTS "scheduled_job_runs" (
     "finished_at" timestamptz,
     "status" text NOT NULL,
     "candidates_considered" integer NOT NULL DEFAULT 0,
-    "emails_sent" integer NOT NULL DEFAULT 0,
-    "emails_skipped" integer NOT NULL DEFAULT 0,
-    "emails_failed" integer NOT NULL DEFAULT 0,
     "error_message" text,
     "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb
 );

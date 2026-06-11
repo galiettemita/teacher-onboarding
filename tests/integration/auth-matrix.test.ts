@@ -23,8 +23,8 @@ vi.mock("@/lib/db/queries/admin-teachers", () => ({
     temporaryPassword: "temporary-password",
   })),
 }));
-vi.mock("@/lib/db/queries/reminder-settings", () => ({
-  getReminderSettings: vi.fn(async () => ({
+vi.mock("@/lib/db/queries/email-settings", () => ({
+  getEmailSettings: vi.fn(async () => ({
     senderName: "Onboarding Portal",
     senderEmail: "noreply@example.com",
     portalUrl: "http://localhost:3000/login",
