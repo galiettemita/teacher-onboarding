@@ -47,6 +47,9 @@ export async function requireTeacher(): Promise<SessionUser> {
 export async function requireTeacherReady(): Promise<SessionUser> {
   const user = await requireTeacher();
   const status = await getActivationStatus(user.id);
+  // Session references a user that no longer exists (e.g. deleted). Treat as
+  // unauthenticated rather than throwing a 500.
+  if (!status) redirect("/login");
   if (status.mustChangePassword) redirect("/teacher/activate");
   return user;
 }

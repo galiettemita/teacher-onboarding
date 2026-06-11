@@ -37,6 +37,9 @@ export async function GET(
   const role = session.user.role;
   if (role === "teacher") {
     const activation = await getActivationStatus(userId);
+    if (!activation) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     if (activation.mustChangePassword) {
       return NextResponse.json(
         { error: "Account activation required", activateUrl: "/teacher/activate" },
