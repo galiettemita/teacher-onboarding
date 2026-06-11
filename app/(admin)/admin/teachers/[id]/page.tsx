@@ -5,8 +5,13 @@ import { AdminNav } from "@/components/admin/nav";
 import { ReviewActions } from "@/components/admin/review-actions";
 import { StatusBadge } from "@/components/status-badge";
 import { ReinviteTeacher } from "@/components/admin/reinvite-teacher";
+import { EditStaffStatus } from "@/components/admin/edit-staff-status";
+import { ExpirationEmailDraft } from "@/components/admin/expiration-email-draft";
 import { getTeacherDetail } from "@/lib/db/queries/admin-teachers";
+import { getTeacherExpirationItems } from "@/lib/db/queries/expiration";
+import { buildExpirationDraft } from "@/lib/email/expiration-draft";
 import { deriveUiStatus } from "@/lib/expiry";
+import { staffStatusLabel, isCurrentlyFirstYearStaff } from "@/lib/staff/status";
 import { NotFoundError } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +39,15 @@ export default async function TeacherDetailPage({
 
   const { user: teacher, profile, documents } = detail;
 
+  // Expiration email draft — only this teacher's expired / expiring-soon docs.
+  const expirationItems = await getTeacherExpirationItems({ role: user.role }, id);
+  const draft = await buildExpirationDraft({
+    teacherName: teacher.name,
+    items: expirationItems,
+  });
+
+  const currentlyFirstYear = isCurrentlyFirstYearStaff(profile);
+
   return (
     <>
       <AdminNav email={user.email} active="teachers" />
@@ -45,8 +59,18 @@ export default async function TeacherDetailPage({
         </div>
 
         <section className="bg-white border border-slate-200 rounded-xl p-6 mb-6">
-          <h1 className="text-2xl font-semibold text-slate-900">{teacher.name}</h1>
-          <p className="text-slate-600">{teacher.email}</p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-900">{teacher.name}</h1>
+              <p className="text-slate-600">{teacher.email}</p>
+            </div>
+            <a
+              href={`/api/admin/teachers/${teacher.id}/download`}
+              className="rounded-md bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium px-4 py-2 whitespace-nowrap"
+            >
+              Download all documents
+            </a>
+          </div>
           <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
             <div>
               <dt className="text-slate-500">Phone</dt>
@@ -81,6 +105,41 @@ export default async function TeacherDetailPage({
               </dd>
             </div>
           </dl>
+
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <dt className="text-slate-500 text-sm">Staff status</dt>
+            <dd className="text-slate-900 mt-1 flex items-center gap-3">
+              <span className="font-medium">{staffStatusLabel(profile.staffStatus)}</span>
+              {profile.staffStatus === "new_first_year" && (
+                <span className="text-xs text-slate-500">
+                  {currentlyFirstYear
+                    ? "Currently in first year — first-year documents apply"
+                    : "First year has ended — first-year-only documents no longer required"}
+                </span>
+              )}
+            </dd>
+            <div className="mt-2">
+              <EditStaffStatus
+                teacherId={teacher.id}
+                initialStatus={
+                  profile.staffStatus === "new_first_year" ? "new_first_year" : "returning"
+                }
+                initialFirstYearStart={profile.firstYearStartDate ?? null}
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <h2 className="text-sm font-medium text-slate-900">Renewal reminder email</h2>
+            <p className="mt-1 mb-3 text-sm text-slate-600">
+              Generate a ready-to-send reminder listing only this teacher&apos;s expired or
+              expiring documents. Nothing is sent automatically — copy it and send it yourself.
+            </p>
+            <ExpirationEmailDraft
+              subject={draft?.subject ?? null}
+              text={draft?.text ?? null}
+            />
+          </div>
 
           {teacher.mustChangePassword ? (
             <div className="mt-6 border-t border-slate-200 pt-4">

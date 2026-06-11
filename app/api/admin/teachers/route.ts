@@ -24,6 +24,11 @@ const Body = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, "hireDate must be YYYY-MM-DD")
     .optional(),
   gradeLevel: z.string().trim().max(50).optional(),
+  staffStatus: z.enum(["new_first_year", "returning"]).optional(),
+  firstYearStartDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "firstYearStartDate must be YYYY-MM-DD")
+    .optional(),
 });
 
 export async function POST(req: Request) {
@@ -59,6 +64,8 @@ export async function POST(req: Request) {
         phone: parsed.data.phone ?? null,
         hireDate: parsed.data.hireDate ?? null,
         gradeLevel: parsed.data.gradeLevel ?? null,
+        staffStatus: parsed.data.staffStatus ?? null,
+        firstYearStartDate: parsed.data.firstYearStartDate ?? null,
       }
     );
 

@@ -23,6 +23,11 @@ export default async function DocumentTypesPage() {
             description: r.description,
             required: r.required,
             renewalMonths: r.renewalMonths,
+            applicability: r.applicability as
+              | "all_staff"
+              | "new_first_year_only"
+              | "returning_staff_only",
+            category: r.category as "medical" | "training" | "general" | "other",
             active: r.active,
           }))}
         />

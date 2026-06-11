@@ -9,6 +9,7 @@ interface FormState {
   phone: string;
   hireDate: string;
   gradeLevel: string;
+  staffStatus: "new_first_year" | "returning";
 }
 
 const EMPTY: FormState = {
@@ -17,6 +18,7 @@ const EMPTY: FormState = {
   phone: "",
   hireDate: "",
   gradeLevel: "",
+  staffStatus: "returning",
 };
 
 export function InviteTeacherForm() {
@@ -51,6 +53,7 @@ export function InviteTeacherForm() {
     if (form.phone.trim()) payload.phone = form.phone.trim();
     if (form.hireDate.trim()) payload.hireDate = form.hireDate.trim();
     if (form.gradeLevel.trim()) payload.gradeLevel = form.gradeLevel.trim();
+    payload.staffStatus = form.staffStatus;
 
     try {
       const res = await fetch("/api/admin/teachers", {
@@ -220,6 +223,48 @@ export function InviteTeacherForm() {
           />
         </div>
       </div>
+
+      <fieldset className="rounded-md border border-slate-200 p-4">
+        <legend className="px-1 text-sm font-medium text-slate-700">
+          Is this a new or returning staff member?
+        </legend>
+        <p className="text-xs text-slate-500 mb-3">
+          New first-year staff are asked for extra first-year paperwork. After their first
+          year, those first-year-only documents are no longer required.
+        </p>
+        <div className="space-y-2">
+          <label className="flex items-start gap-2 text-sm text-slate-800">
+            <input
+              type="radio"
+              name="staffStatus"
+              className="mt-1"
+              checked={form.staffStatus === "new_first_year"}
+              onChange={() => update("staffStatus", "new_first_year")}
+            />
+            <span>
+              <span className="font-medium">New first-year staff</span>
+              <span className="block text-xs text-slate-500">
+                In their first year. Uses the hire date above to know when the first year ends.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm text-slate-800">
+            <input
+              type="radio"
+              name="staffStatus"
+              className="mt-1"
+              checked={form.staffStatus === "returning"}
+              onChange={() => update("staffStatus", "returning")}
+            />
+            <span>
+              <span className="font-medium">Returning staff</span>
+              <span className="block text-xs text-slate-500">
+                Already been here a year or more. Skips first-year-only documents.
+              </span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
 
       <button
         type="submit"

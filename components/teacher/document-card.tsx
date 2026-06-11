@@ -50,13 +50,22 @@ export function DocumentCard({ entry }: DocumentCardProps) {
 
       {currentDoc && uiStatus === "approved" && currentDoc.expiresAt && (
         <p className="mt-3 text-sm text-slate-600">
-          Expires {formatDate(currentDoc.expiresAt)}
+          Your {documentType.name} expires on {formatDate(currentDoc.expiresAt)}.
         </p>
       )}
 
       {currentDoc && uiStatus === "expiring_soon" && currentDoc.expiresAt && (
-        <p className="mt-3 text-sm text-orange-800">
-          Expires {formatDate(currentDoc.expiresAt)} — please renew soon.
+        <p className="mt-3 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900">
+          Your {documentType.name} expires on {formatDate(currentDoc.expiresAt)}. Please
+          upload an updated copy before it expires.
+        </p>
+      )}
+
+      {currentDoc && uiStatus === "expired" && (
+        <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+          Your {documentType.name}
+          {currentDoc.expiresAt ? ` expired on ${formatDate(currentDoc.expiresAt)}` : " has expired"}.
+          Please upload a new copy to stay up to date.
         </p>
       )}
 

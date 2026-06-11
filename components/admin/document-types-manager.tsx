@@ -3,12 +3,17 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+type Applicability = "all_staff" | "new_first_year_only" | "returning_staff_only";
+type Category = "medical" | "training" | "general" | "other";
+
 interface DocType {
   id: string;
   name: string;
   description: string | null;
   required: boolean;
   renewalMonths: number;
+  applicability: Applicability;
+  category: Category;
   active: boolean;
 }
 
@@ -17,6 +22,8 @@ interface DraftRow {
   description: string;
   required: boolean;
   renewalMonths: number;
+  applicability: Applicability;
+  category: Category;
 }
 
 const EMPTY_DRAFT: DraftRow = {
@@ -24,6 +31,21 @@ const EMPTY_DRAFT: DraftRow = {
   description: "",
   required: true,
   renewalMonths: 24,
+  applicability: "all_staff",
+  category: "general",
+};
+
+const APPLICABILITY_LABELS: Record<Applicability, string> = {
+  all_staff: "Applies to all staff",
+  new_first_year_only: "Only required during first year",
+  returning_staff_only: "Only required for returning staff",
+};
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  medical: "Medical form (expires every 2 years)",
+  training: "Training certification (expires every 2 years)",
+  general: "General",
+  other: "Other",
 };
 
 function DraftRowEditor({
@@ -69,6 +91,44 @@ function DraftRowEditor({
             }
             className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">
+            Required for
+          </label>
+          <select
+            value={draft.applicability}
+            onChange={(e) =>
+              setDraft({ ...draft, applicability: e.target.value as Applicability })
+            }
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {(Object.keys(APPLICABILITY_LABELS) as Applicability[]).map((k) => (
+              <option key={k} value={k}>
+                {APPLICABILITY_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">
+            Document kind
+          </label>
+          <select
+            value={draft.category}
+            onChange={(e) =>
+              setDraft({ ...draft, category: e.target.value as Category })
+            }
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {(Object.keys(CATEGORY_LABELS) as Category[]).map((k) => (
+              <option key={k} value={k}>
+                {CATEGORY_LABELS[k]}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
       <div>
@@ -211,6 +271,8 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
       description: t.description ?? "",
       required: t.required,
       renewalMonths: t.renewalMonths,
+      applicability: t.applicability,
+      category: t.category,
     });
     setError(null);
   }
@@ -251,6 +313,7 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
           <thead className="bg-slate-50 text-slate-600">
             <tr>
               <th className="text-left px-4 py-3 font-medium">Name</th>
+              <th className="text-left px-4 py-3 font-medium">Required for</th>
               <th className="text-left px-4 py-3 font-medium">Required</th>
               <th className="text-left px-4 py-3 font-medium">Renewal</th>
               <th className="text-left px-4 py-3 font-medium">Status</th>
@@ -260,7 +323,7 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                   No document types yet. Create one above.
                 </td>
               </tr>
@@ -269,7 +332,7 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
                 if (editingId === t.id) {
                   return (
                     <tr key={t.id} className="border-t border-slate-100">
-                      <td colSpan={5} className="px-4 py-3">
+                      <td colSpan={6} className="px-4 py-3">
                         <DraftRowEditor
                           draft={editDraft}
                           setDraft={setEditDraft}
@@ -285,7 +348,7 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
                 if (confirmDeactivateId === t.id) {
                   return (
                     <tr key={t.id} className="border-t border-slate-100 bg-amber-50">
-                      <td colSpan={5} className="px-4 py-3">
+                      <td colSpan={6} className="px-4 py-3">
                         <p className="text-sm text-amber-900 mb-2">
                           Deactivate <span className="font-medium">{t.name}</span>?
                           This will hide the type from teachers but keep their history.
@@ -319,6 +382,14 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
                       {t.description && (
                         <div className="text-xs text-slate-500">{t.description}</div>
                       )}
+                      {t.category !== "general" && (
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          {CATEGORY_LABELS[t.category]}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {APPLICABILITY_LABELS[t.applicability]}
                     </td>
                     <td className="px-4 py-3 text-slate-700">
                       {t.required ? "Yes" : "No"}

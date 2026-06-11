@@ -6,6 +6,7 @@ interface AdminNavProps {
   active?:
     | "dashboard"
     | "teachers"
+    | "expirations"
     | "doc-types"
     | "reports"
     | "audit";
@@ -14,6 +15,7 @@ interface AdminNavProps {
 const NAV_ITEMS = [
   { key: "dashboard" as const, href: "/admin/dashboard", label: "Dashboard" },
   { key: "teachers" as const, href: "/admin/teachers", label: "Teachers" },
+  { key: "expirations" as const, href: "/admin/expirations", label: "Expirations" },
   { key: "doc-types" as const, href: "/admin/document-types", label: "Document types" },
   { key: "reports" as const, href: "/admin/reports", label: "Reports" },
   { key: "audit" as const, href: "/admin/audit", label: "Audit" },

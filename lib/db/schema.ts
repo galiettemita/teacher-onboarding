@@ -42,31 +42,72 @@ export const users = pgTable(
 );
 
 // ---------- teacher_profiles ----------
-export const teacherProfiles = pgTable("teacher_profiles", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id")
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: "restrict" }),
-  phone: text("phone"),
-  hireDate: date("hire_date"),
-  gradeLevel: text("grade_level"),
-  onboardingComplete: boolean("onboarding_complete").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const teacherProfiles = pgTable(
+  "teacher_profiles",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "restrict" }),
+    phone: text("phone"),
+    hireDate: date("hire_date"),
+    gradeLevel: text("grade_level"),
+    // Staff classification driving first-year-only document requirements.
+    //   new_first_year : in their first year — first-year-only docs apply.
+    //   returning      : established staff — first-year-only docs never apply.
+    // Existing teachers default to `returning` (the safe assumption: never
+    // block someone for a first-year-only doc they were never asked for).
+    staffStatus: text("staff_status").notNull().default("returning"),
+    // Anchor for the "is the first year over yet?" computation. Falls back to
+    // hire_date when null; the first year is considered over at anchor + 1 year.
+    firstYearStartDate: date("first_year_start_date"),
+    onboardingComplete: boolean("onboarding_complete").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    staffStatusCheck: check(
+      "teacher_profiles_staff_status_check",
+      sql`${t.staffStatus} in ('new_first_year','returning')`
+    ),
+  })
+);
 
 // ---------- document_types ----------
-export const documentTypes = pgTable("document_types", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull().unique(),
-  description: text("description"),
-  required: boolean("required").notNull().default(true),
-  renewalMonths: integer("renewal_months").notNull().default(24),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const documentTypes = pgTable(
+  "document_types",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull().unique(),
+    description: text("description"),
+    required: boolean("required").notNull().default(true),
+    renewalMonths: integer("renewal_months").notNull().default(24),
+    // Who this document is required for. Drives both the teacher checklist and
+    // the admin completion calculation so returning staff are never marked
+    // incomplete for first-year-only paperwork.
+    //   all_staff           : everyone.
+    //   new_first_year_only : only while the staff member is in their first year.
+    //   returning_staff_only: only once the first year is over / returning staff.
+    applicability: text("applicability").notNull().default("all_staff"),
+    // Document family. Medical forms and training certifications carry a
+    // renewal cadence (default 24 months); general/other typically do not.
+    category: text("category").notNull().default("general"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    applicabilityCheck: check(
+      "document_types_applicability_check",
+      sql`${t.applicability} in ('all_staff','new_first_year_only','returning_staff_only')`
+    ),
+    categoryCheck: check(
+      "document_types_category_check",
+      sql`${t.category} in ('medical','training','general','other')`
+    ),
+  })
+);
 
 // ---------- teacher_documents ----------
 export const teacherDocuments = pgTable(
@@ -196,5 +237,16 @@ export const verificationTokens = pgTable("verificationToken", {
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type TeacherProfile = typeof teacherProfiles.$inferSelect;
 export type DocumentType = typeof documentTypes.$inferSelect;
 export type TeacherDocument = typeof teacherDocuments.$inferSelect;
+
+/** Staff classification stored on `teacher_profiles.staff_status`. */
+export type StaffStatus = "new_first_year" | "returning";
+/** Document applicability stored on `document_types.applicability`. */
+export type DocApplicability =
+  | "all_staff"
+  | "new_first_year_only"
+  | "returning_staff_only";
+/** Document family stored on `document_types.category`. */
+export type DocCategory = "medical" | "training" | "general" | "other";
