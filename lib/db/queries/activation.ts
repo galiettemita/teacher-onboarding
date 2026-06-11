@@ -24,14 +24,20 @@ export interface ActivationStatus {
   mustChangePassword: boolean;
 }
 
-export async function getActivationStatus(userId: string): Promise<ActivationStatus> {
+/**
+ * Returns the activation status, or `null` if no user row exists for `userId`.
+ * A null result means the session points at a user that no longer exists (e.g.
+ * the account was deleted while the session was still valid) — callers should
+ * treat that as unauthenticated (redirect to login / 401), never a 500.
+ */
+export async function getActivationStatus(userId: string): Promise<ActivationStatus | null> {
   const [row] = await db
     .select({ mustChangePassword: users.mustChangePassword })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
 
-  if (!row) throw new ForbiddenError("User not found");
+  if (!row) return null;
   return { mustChangePassword: row.mustChangePassword };
 }
 

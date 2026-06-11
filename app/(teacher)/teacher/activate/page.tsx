@@ -12,6 +12,8 @@ export default async function ActivateAccountPage({
 }) {
   const user = await requireTeacher();
   const status = await getActivationStatus(user.id);
+  // Session references a user that no longer exists — send them to log in.
+  if (!status) redirect("/login");
   // Already activated — nothing to do here.
   if (!status.mustChangePassword) redirect("/teacher/dashboard");
 

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   session: null as null | { user: { id: string; email?: string; name?: string; role: "teacher" | "admin" } },
   mustChangePassword: false,
+  userMissing: false,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -16,7 +17,8 @@ vi.mock("@/lib/auth/config", () => ({
 }));
 
 vi.mock("@/lib/db/queries/activation", () => ({
-  getActivationStatus: async () => ({ mustChangePassword: state.mustChangePassword }),
+  getActivationStatus: async () =>
+    state.userMissing ? null : { mustChangePassword: state.mustChangePassword },
 }));
 
 describe("account activation guard", () => {
@@ -25,6 +27,7 @@ describe("account activation guard", () => {
       user: { id: "teacher-1", email: "teacher@example.com", name: "Teacher", role: "teacher" },
     };
     state.mustChangePassword = false;
+    state.userMissing = false;
   });
 
   it("allows teachers who have activated their account", async () => {
@@ -41,5 +44,12 @@ describe("account activation guard", () => {
     const { requireTeacherReady } = await import("@/lib/auth/guards");
 
     await expect(requireTeacherReady()).rejects.toThrow("NEXT_REDIRECT:/teacher/activate");
+  });
+
+  it("redirects to login when the session user no longer exists (deleted)", async () => {
+    state.userMissing = true;
+    const { requireTeacherReady } = await import("@/lib/auth/guards");
+
+    await expect(requireTeacherReady()).rejects.toThrow("NEXT_REDIRECT:/login");
   });
 });

@@ -54,6 +54,9 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const activation = await getActivationStatus(user.id);
+  if (!activation) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   if (activation.mustChangePassword) {
     return NextResponse.json(
       { error: "Account activation required", activateUrl: "/teacher/activate" },
