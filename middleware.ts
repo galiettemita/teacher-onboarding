@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth/edge";
 import { clientIp, enforceRateLimit } from "@/lib/rate-limit/edge";
 import { buildCsp, generateNonce } from "@/lib/security/csp";
 
-const PUBLIC_PATHS = new Set(["/", "/login", "/unauthorized"]);
+const PUBLIC_PATHS = new Set(["/", "/login", "/unauthorized", "/logout"]);
 const PUBLIC_PREFIXES = ["/api/auth", "/_next", "/favicon", "/assets"];
 
 function isPublic(pathname: string): boolean {

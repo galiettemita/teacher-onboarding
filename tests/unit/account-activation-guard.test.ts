@@ -46,10 +46,10 @@ describe("account activation guard", () => {
     await expect(requireTeacherReady()).rejects.toThrow("NEXT_REDIRECT:/teacher/activate");
   });
 
-  it("redirects to login when the session user no longer exists (deleted)", async () => {
+  it("clears the session via /logout when the user no longer exists (deleted)", async () => {
     state.userMissing = true;
     const { requireTeacherReady } = await import("@/lib/auth/guards");
 
-    await expect(requireTeacherReady()).rejects.toThrow("NEXT_REDIRECT:/login");
+    await expect(requireTeacherReady()).rejects.toThrow("NEXT_REDIRECT:/logout");
   });
 });
