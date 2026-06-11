@@ -181,15 +181,39 @@ export default async function TeacherDetailPage({
                   </td>
                 </tr>
               ) : (
-                documents.map((d) => (
-                  <tr key={d.id} className="border-t border-slate-100 align-top">
+                documents.map((d) => {
+                  const ui = deriveUiStatus(d);
+                  const isAlert = ui === "expiring_soon" || ui === "expired";
+                  return (
+                  <tr
+                    key={d.id}
+                    className={
+                      "border-t border-slate-100 align-top " +
+                      (isAlert ? "bg-red-50/40" : "")
+                    }
+                  >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">
-                        {d.documentType?.name ?? "Unknown type"}
+                      <div className="flex items-center gap-2">
+                        {isAlert && (
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-600"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <span className="font-medium text-slate-900">
+                          {d.documentType?.name ?? "Unknown type"}
+                        </span>
                       </div>
                       <div className="text-xs text-slate-500 break-all">
                         {d.originalFilename}
                       </div>
+                      {isAlert && (
+                        <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                          {ui === "expired"
+                            ? "Expired — needs renewal"
+                            : "Expiring soon — renew within 3 months"}
+                        </div>
+                      )}
                       {d.status === "rejected" && d.rejectionReason && (
                         <div className="text-xs text-red-700 mt-1">
                           Reason: {d.rejectionReason}
@@ -197,7 +221,7 @@ export default async function TeacherDetailPage({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={deriveUiStatus(d)} />
+                      <StatusBadge status={ui} />
                     </td>
                     <td className="px-4 py-3 text-slate-600 tabular-nums">
                       {formatDate(d.uploadedAt)}
@@ -205,7 +229,12 @@ export default async function TeacherDetailPage({
                     <td className="px-4 py-3 text-slate-600 tabular-nums">
                       {formatDate(d.reviewedAt)}
                     </td>
-                    <td className="px-4 py-3 text-slate-600 tabular-nums">
+                    <td
+                      className={
+                        "px-4 py-3 tabular-nums " +
+                        (isAlert ? "font-semibold text-red-700" : "text-slate-600")
+                      }
+                    >
                       {formatDate(d.expiresAt)}
                     </td>
                     <td className="px-4 py-3">
@@ -220,7 +249,8 @@ export default async function TeacherDetailPage({
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

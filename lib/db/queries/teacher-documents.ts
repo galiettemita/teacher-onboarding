@@ -29,8 +29,11 @@ function assertTeacher(user: SessionUser): void {
   }
 }
 
-/** Number of days before `expires_at` that we surface "expiring soon" in the UI. */
-export const EXPIRING_SOON_DAYS = 30;
+/**
+ * Number of days before `expires_at` that we surface "expiring soon" in the UI.
+ * Three months (90 days) — kept in sync with lib/expiry/status.ts.
+ */
+export const EXPIRING_SOON_DAYS = 90;
 
 export type UiStatus =
   | "missing"

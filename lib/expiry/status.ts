@@ -24,8 +24,11 @@ export type DeriveOpts = {
  * Read the configured "expiring soon" window. Resolution order:
  *   1. explicit opts.windowDays
  *   2. EXPIRING_SOON_WINDOW_DAYS env var (parsed as int, must be > 0)
- *   3. 30 (default)
+ *   3. 90 (default) — a document counts as "expiring soon" once it is within
+ *      three months (90 days) of its expiration date.
  */
+export const EXPIRING_SOON_WINDOW_DAYS = 90;
+
 export function getExpiringSoonWindowDays(opts?: DeriveOpts): number {
   if (opts?.windowDays !== undefined) return opts.windowDays;
   const raw = process.env.EXPIRING_SOON_WINDOW_DAYS;
@@ -33,7 +36,7 @@ export function getExpiringSoonWindowDays(opts?: DeriveOpts): number {
     const n = Number.parseInt(raw, 10);
     if (Number.isFinite(n) && n > 0) return n;
   }
-  return 30;
+  return EXPIRING_SOON_WINDOW_DAYS;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
