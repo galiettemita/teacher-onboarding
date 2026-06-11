@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth/config";
 import { inviteTeacher } from "@/lib/db/queries/admin-teachers";
-import { getReminderSettings } from "@/lib/db/queries/reminder-settings";
+import { getEmailSettings } from "@/lib/db/queries/email-settings";
 import { inviteEmailDeliveryEnabled, sendEmail } from "@/lib/email/send";
 import { renderTeacherInvite } from "@/lib/email/templates/teacher-invite";
 import { errorResponse } from "@/lib/api/errors";
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
         gradeLevel: parsed.data.gradeLevel ?? null,
       }
     );
-    const settings = await getReminderSettings();
+    const settings = await getEmailSettings();
     let inviteEmailSent = false;
     let inviteEmailError: string | null = null;
 

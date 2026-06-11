@@ -157,8 +157,8 @@ export function buildFromHeader(name: string, email: string): string {
 
 /**
  * Validate a plain-text body. Allows \r, \n, \t — everything else in the
- * C0/DEL range is rejected. We also cap length aggressively; reminder
- * emails are short by design (§11.3 rule 5).
+ * C0/DEL range is rejected. We also cap length aggressively; outbound
+ * emails are short by design.
  */
 export function sanitizeTextBody(raw: string): string {
   if (typeof raw !== "string") {

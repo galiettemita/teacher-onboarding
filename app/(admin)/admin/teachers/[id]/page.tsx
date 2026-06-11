@@ -131,12 +131,6 @@ export default async function TeacherDetailPage({
                         >
                           Download
                         </a>
-                        <Link
-                          href={`/admin/reminders/manual?teacherId=${teacher.id}&teacherDocumentId=${d.id}`}
-                          className="text-blue-700 hover:underline text-sm"
-                        >
-                          Send reminder
-                        </Link>
                         {d.status === "pending" && <ReviewActions documentId={d.id} />}
                       </div>
                     </td>

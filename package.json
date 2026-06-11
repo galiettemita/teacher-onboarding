@@ -18,8 +18,7 @@
     "test:integration": "vitest run tests/integration",
     "test:leakage": "node scripts/leakage-grep.mjs",
     "test:smoke": "node scripts/smoke-csp.mjs",
-    "test:smoke:storage": "node --import tsx scripts/smoke-storage.mjs",
-    "test:smoke:reminders": "node scripts/smoke-reminders.mjs"
+    "test:smoke:storage": "node --import tsx scripts/smoke-storage.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",
