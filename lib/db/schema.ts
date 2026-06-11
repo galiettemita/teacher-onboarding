@@ -90,9 +90,6 @@ export const documentTypes = pgTable(
     //   new_first_year_only : only while the staff member is in their first year.
     //   returning_staff_only: only once the first year is over / returning staff.
     applicability: text("applicability").notNull().default("all_staff"),
-    // Document family. Medical forms and training certifications carry a
-    // renewal cadence (default 24 months); general/other typically do not.
-    category: text("category").notNull().default("general"),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -101,10 +98,6 @@ export const documentTypes = pgTable(
     applicabilityCheck: check(
       "document_types_applicability_check",
       sql`${t.applicability} in ('all_staff','new_first_year_only','returning_staff_only')`
-    ),
-    categoryCheck: check(
-      "document_types_category_check",
-      sql`${t.category} in ('medical','training','general','other')`
     ),
   })
 );
@@ -248,5 +241,3 @@ export type DocApplicability =
   | "all_staff"
   | "new_first_year_only"
   | "returning_staff_only";
-/** Document family stored on `document_types.category`. */
-export type DocCategory = "medical" | "training" | "general" | "other";

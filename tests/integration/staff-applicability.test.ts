@@ -37,7 +37,6 @@ const allStaffType = {
   applicability: "all_staff",
   required: true,
   active: true,
-  category: "general",
   renewalMonths: 24,
 };
 const firstYearType = {
@@ -46,7 +45,6 @@ const firstYearType = {
   applicability: "new_first_year_only",
   required: true,
   active: true,
-  category: "general",
   renewalMonths: 0,
 };
 

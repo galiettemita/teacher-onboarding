@@ -15,7 +15,6 @@ const Body = z.object({
   applicability: z
     .enum(["all_staff", "new_first_year_only", "returning_staff_only"])
     .optional(),
-  category: z.enum(["medical", "training", "general", "other"]).optional(),
 });
 
 async function requireAdminSession() {
@@ -60,7 +59,6 @@ export async function PATCH(
       required: parsed.data.required,
       renewalMonths: parsed.data.renewalMonths,
       applicability: parsed.data.applicability,
-      category: parsed.data.category,
     });
     return NextResponse.json(row, { status: 200 });
   } catch (err) {

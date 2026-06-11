@@ -26,7 +26,6 @@ export interface ExpirationItem {
   documentId: string;
   documentTypeId: string;
   documentTypeName: string;
-  category: string;
   uploadedAt: Date;
   expiresAt: Date | null;
   /** Positive = days until expiry; negative = days overdue. */
@@ -73,7 +72,6 @@ export async function getTeacherExpirationItems(
     .select({
       doc: teacherDocuments,
       typeName: documentTypes.name,
-      category: documentTypes.category,
     })
     .from(teacherDocuments)
     .innerJoin(documentTypes, eq(documentTypes.id, teacherDocuments.documentTypeId))
@@ -94,7 +92,6 @@ export async function getTeacherExpirationItems(
       documentId: r.doc.id,
       documentTypeId: r.doc.documentTypeId,
       documentTypeName: r.typeName,
-      category: r.category,
       uploadedAt: r.doc.uploadedAt,
       expiresAt: r.doc.expiresAt,
       daysRemaining: daysRemaining(r.doc.expiresAt, now),
@@ -118,7 +115,6 @@ export async function listExpirationAlerts(
     .select({
       doc: teacherDocuments,
       typeName: documentTypes.name,
-      category: documentTypes.category,
       teacherId: users.id,
       teacherName: users.name,
       teacherEmail: users.email,
@@ -143,7 +139,6 @@ export async function listExpirationAlerts(
       documentId: r.doc.id,
       documentTypeId: r.doc.documentTypeId,
       documentTypeName: r.typeName,
-      category: r.category,
       uploadedAt: r.doc.uploadedAt,
       expiresAt: r.doc.expiresAt,
       daysRemaining: daysRemaining(r.doc.expiresAt, now),

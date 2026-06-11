@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 type Applicability = "all_staff" | "new_first_year_only" | "returning_staff_only";
-type Category = "medical" | "training" | "general" | "other";
 
 interface DocType {
   id: string;
@@ -13,7 +12,6 @@ interface DocType {
   required: boolean;
   renewalMonths: number;
   applicability: Applicability;
-  category: Category;
   active: boolean;
 }
 
@@ -23,7 +21,6 @@ interface DraftRow {
   required: boolean;
   renewalMonths: number;
   applicability: Applicability;
-  category: Category;
 }
 
 const EMPTY_DRAFT: DraftRow = {
@@ -32,20 +29,12 @@ const EMPTY_DRAFT: DraftRow = {
   required: true,
   renewalMonths: 24,
   applicability: "all_staff",
-  category: "general",
 };
 
 const APPLICABILITY_LABELS: Record<Applicability, string> = {
   all_staff: "Applies to all staff",
   new_first_year_only: "Only required during first year",
   returning_staff_only: "Only required for returning staff",
-};
-
-const CATEGORY_LABELS: Record<Category, string> = {
-  medical: "Medical form (expires every 2 years)",
-  training: "Training certification (expires every 2 years)",
-  general: "General",
-  other: "Other",
 };
 
 function DraftRowEditor({
@@ -93,43 +82,23 @@ function DraftRowEditor({
           />
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            Required for
-          </label>
-          <select
-            value={draft.applicability}
-            onChange={(e) =>
-              setDraft({ ...draft, applicability: e.target.value as Applicability })
-            }
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {(Object.keys(APPLICABILITY_LABELS) as Applicability[]).map((k) => (
-              <option key={k} value={k}>
-                {APPLICABILITY_LABELS[k]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            Document kind
-          </label>
-          <select
-            value={draft.category}
-            onChange={(e) =>
-              setDraft({ ...draft, category: e.target.value as Category })
-            }
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {(Object.keys(CATEGORY_LABELS) as Category[]).map((k) => (
-              <option key={k} value={k}>
-                {CATEGORY_LABELS[k]}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-700 mb-1">
+          Required for
+        </label>
+        <select
+          value={draft.applicability}
+          onChange={(e) =>
+            setDraft({ ...draft, applicability: e.target.value as Applicability })
+          }
+          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {(Object.keys(APPLICABILITY_LABELS) as Applicability[]).map((k) => (
+            <option key={k} value={k}>
+              {APPLICABILITY_LABELS[k]}
+            </option>
+          ))}
+        </select>
       </div>
       <div>
         <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
@@ -272,7 +241,6 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
       required: t.required,
       renewalMonths: t.renewalMonths,
       applicability: t.applicability,
-      category: t.category,
     });
     setError(null);
   }
@@ -381,11 +349,6 @@ export function DocumentTypesManager({ initial }: { initial: DocType[] }) {
                       <div className="font-medium text-slate-900">{t.name}</div>
                       {t.description && (
                         <div className="text-xs text-slate-500">{t.description}</div>
-                      )}
-                      {t.category !== "general" && (
-                        <div className="text-xs text-slate-400 mt-0.5">
-                          {CATEGORY_LABELS[t.category]}
-                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-700">

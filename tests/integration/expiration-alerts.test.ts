@@ -41,7 +41,6 @@ function alertRow(over: {
         over.expiresInDays === null ? null : new Date(NOW.getTime() + over.expiresInDays * DAY),
     },
     typeName: "Medical Form",
-    category: "medical",
     teacherId: over.teacherId,
     teacherName: over.teacherName,
     teacherEmail: `${over.teacherName}@x.com`,

@@ -3,7 +3,6 @@ import { requireAdmin } from "@/lib/auth/guards";
 import { AdminNav } from "@/components/admin/nav";
 import { StatusBadge } from "@/components/status-badge";
 import { listExpirationAlerts } from "@/lib/db/queries/expiration";
-import { categoryLabel } from "@/lib/expiry/category";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +71,6 @@ export default async function ExpirationsPage() {
                 <tr>
                   <th className="text-left px-4 py-3 font-medium">Teacher</th>
                   <th className="text-left px-4 py-3 font-medium">Document</th>
-                  <th className="text-left px-4 py-3 font-medium">Kind</th>
                   <th className="text-left px-4 py-3 font-medium">Submitted</th>
                   <th className="text-left px-4 py-3 font-medium">Expires</th>
                   <th className="text-left px-4 py-3 font-medium">Timing</th>
@@ -88,7 +86,6 @@ export default async function ExpirationsPage() {
                       <div className="text-xs text-slate-500">{a.teacherEmail}</div>
                     </td>
                     <td className="px-4 py-3 text-slate-700">{a.documentTypeName}</td>
-                    <td className="px-4 py-3 text-slate-600">{categoryLabel(a.category)}</td>
                     <td className="px-4 py-3 text-slate-600 tabular-nums">
                       {formatDate(a.uploadedAt)}
                     </td>

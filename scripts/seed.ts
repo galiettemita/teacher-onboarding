@@ -18,7 +18,6 @@ import { db } from "@/lib/db/client";
 import { users, teacherProfiles, documentTypes } from "@/lib/db/schema";
 
 type StaffApplicability = "all_staff" | "new_first_year_only" | "returning_staff_only";
-type DocCategory = "medical" | "training" | "general" | "other";
 
 type StarterDocType = {
   name: string;
@@ -26,7 +25,6 @@ type StarterDocType = {
   required: boolean;
   renewalMonths: number;
   applicability: StaffApplicability;
-  category: DocCategory;
 };
 
 const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
@@ -36,7 +34,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 0, // one-time, but kept in schema; renewal logic will treat 0 as "no renewal"
     applicability: "all_staff",
-    category: "general",
   },
   {
     name: "Background Check",
@@ -44,7 +41,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 24,
     applicability: "all_staff",
-    category: "general",
   },
   {
     name: "Fingerprint Clearance",
@@ -52,7 +48,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 24,
     applicability: "all_staff",
-    category: "general",
   },
   {
     name: "Mandated Reporter Training",
@@ -60,7 +55,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 24,
     applicability: "all_staff",
-    category: "training",
   },
   {
     name: "Child Abuse Prevention Training",
@@ -68,7 +62,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 24,
     applicability: "all_staff",
-    category: "training",
   },
   {
     name: "CPR / First Aid Certificate",
@@ -76,7 +69,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 24,
     applicability: "all_staff",
-    category: "medical",
   },
   {
     name: "TB Test / Health Screening",
@@ -84,7 +76,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 24,
     applicability: "all_staff",
-    category: "medical",
   },
   {
     name: "ID / Driver's License",
@@ -92,7 +83,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 0,
     applicability: "all_staff",
-    category: "general",
   },
   {
     name: "W-4 or Tax Form",
@@ -100,7 +90,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 0,
     applicability: "all_staff",
-    category: "general",
   },
   {
     name: "Direct Deposit Form",
@@ -108,7 +97,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 0,
     applicability: "all_staff",
-    category: "general",
   },
   {
     name: "Signed Handbook Acknowledgment",
@@ -116,7 +104,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 24,
     applicability: "all_staff",
-    category: "general",
   },
   {
     name: "New Hire Orientation Packet",
@@ -124,7 +111,6 @@ const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
     required: true,
     renewalMonths: 0,
     applicability: "new_first_year_only",
-    category: "general",
   },
 ];
 
@@ -206,7 +192,6 @@ async function upsertDocumentType(dt: StarterDocType) {
       required: dt.required,
       renewalMonths: dt.renewalMonths,
       applicability: dt.applicability,
-      category: dt.category,
       active: true,
     })
     .onConflictDoUpdate({
@@ -216,7 +201,6 @@ async function upsertDocumentType(dt: StarterDocType) {
         required: dt.required,
         renewalMonths: dt.renewalMonths,
         applicability: dt.applicability,
-        category: dt.category,
         active: true,
         updatedAt: new Date(),
       },

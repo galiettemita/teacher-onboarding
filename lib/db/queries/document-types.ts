@@ -20,7 +20,6 @@ const APPLICABILITIES = [
   "new_first_year_only",
   "returning_staff_only",
 ] as const;
-const CATEGORIES = ["medical", "training", "general", "other"] as const;
 
 export interface DocTypeInput {
   name: string;
@@ -28,7 +27,6 @@ export interface DocTypeInput {
   required: boolean;
   renewalMonths: number;
   applicability?: (typeof APPLICABILITIES)[number];
-  category?: (typeof CATEGORIES)[number];
 }
 
 function validateInput(input: DocTypeInput) {
@@ -49,11 +47,7 @@ function validateInput(input: DocTypeInput) {
   if (!APPLICABILITIES.includes(applicability)) {
     throw new ValidationError("invalid applicability");
   }
-  const category = input.category ?? "general";
-  if (!CATEGORIES.includes(category)) {
-    throw new ValidationError("invalid category");
-  }
-  return { ...input, name, applicability, category };
+  return { ...input, name, applicability };
 }
 
 /**
@@ -93,7 +87,6 @@ export async function createDocumentType(
       required: v.required,
       renewalMonths: v.renewalMonths,
       applicability: v.applicability,
-      category: v.category,
       active: true,
     })
     .returning();
@@ -143,7 +136,6 @@ export async function updateDocumentType(
       required: v.required,
       renewalMonths: v.renewalMonths,
       applicability: v.applicability,
-      category: v.category,
       updatedAt: new Date(),
     })
     .where(eq(documentTypes.id, id))

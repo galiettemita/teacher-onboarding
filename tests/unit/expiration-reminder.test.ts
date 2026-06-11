@@ -69,7 +69,6 @@ describe("buildExpirationDraft (test 19, 20)", () => {
           documentId: "d1",
           documentTypeId: "t1",
           documentTypeName: "Medical Form",
-          category: "medical",
           uploadedAt: new Date("2024-08-12T00:00:00Z"),
           expiresAt: new Date("2026-08-12T00:00:00Z"),
           daysRemaining: 30,

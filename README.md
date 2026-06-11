@@ -41,11 +41,11 @@ response, [`docs/SECURITY.md`](./docs/SECURITY.md).
   first-year start / hire date), and returning staff are never marked
   incomplete for documents they don't need. Historical uploads are always
   preserved.
-- **Two-year expiration tracking**: document types have a category
-  (`medical`, `training`, `general`, `other`). Medical forms and training
-  certifications renew every 24 months. Admins get an **Expirations** alert
-  center (`/admin/expirations`) listing every expired / expiring-soon document
-  with teacher, dates, and days remaining/overdue, plus dashboard tiles.
+- **Two-year expiration tracking**: each document type has a renewal cadence
+  (`renewal_months`, default 24 = two years; `0` = never expires). Admins get
+  an **Expirations** alert center (`/admin/expirations`) listing every expired /
+  expiring-soon document with teacher, dates, and days remaining/overdue, plus
+  dashboard tiles.
 - **Renewal reminder drafts**: on a teacher's admin page, "Generate expiration
   email draft" produces a copyable, school-appropriate reminder listing only
   that teacher's expired / expiring documents. Nothing is sent automatically —
