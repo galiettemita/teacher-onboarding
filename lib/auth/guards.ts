@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getActivationStatus } from "@/lib/db/queries/activation";
 import { auth } from "./config";
 import type { AppRole } from "./config";
 
@@ -39,5 +40,13 @@ export async function requireAdmin(): Promise<SessionUser> {
 export async function requireTeacher(): Promise<SessionUser> {
   const user = await requireUser();
   if (user.role !== "teacher") redirect("/unauthorized");
+  return user;
+}
+
+/** Require a teacher who has activated their account (created their own password). */
+export async function requireTeacherReady(): Promise<SessionUser> {
+  const user = await requireTeacher();
+  const status = await getActivationStatus(user.id);
+  if (status.mustChangePassword) redirect("/teacher/activate");
   return user;
 }

@@ -291,18 +291,19 @@ function generateTemporaryPassword(): string {
 }
 
 /**
- * Admin-creates-teacher flow (PROJECT_CONTEXT §5.6).
+ * Admin-creates-teacher flow.
  *
  * In one transaction:
  *   1. Lowercase + validate email. Reject duplicates with ConflictError (409).
  *   2. Generate a temporary password and store only its bcrypt hash.
- *   3. Insert users row (role='teacher', email_verified_at=null).
+ *   3. Insert users row (role='teacher') pending activation
+ *      (must_change_password=true, activated_at=null).
  *   4. Insert teacher_profiles row pointing at the new user.
  *   5. Write user.invite audit row.
  *
- * The temporary password is returned exactly once so the route can either send
- * it by email when a real provider is configured or show it to the admin for
- * out-of-band delivery. It is never written to audit logs.
+ * The temporary password is returned exactly once so the route can hand it to
+ * the admin to deliver out-of-band. It is never written to audit logs, and the
+ * application sends no email itself.
  */
 export async function inviteTeacher(
   currentAdmin: { id: string; role: string },
@@ -337,6 +338,7 @@ export async function inviteTeacher(
         name,
         role: "teacher",
         passwordHash,
+        mustChangePassword: true,
         emailVerified: null,
       })
       .returning();
@@ -364,6 +366,66 @@ export async function inviteTeacher(
       id: created.id,
       email: created.email,
       name: created.name,
+      temporaryPassword,
+    };
+  });
+}
+
+/**
+ * Re-invite a teacher who has not yet activated their account.
+ *
+ * Generates a fresh temporary password and stores only its hash, which
+ * overwrites the previous one — so any earlier temporary password stops
+ * working immediately and only the newest one is valid. The account stays
+ * pending activation (must_change_password = true, activated_at = null) and
+ * the teacher record is preserved.
+ *
+ * Refuses if the teacher has already activated: their self-chosen password
+ * must not be clobbered by an admin action.
+ */
+export async function reinviteTeacher(
+  currentAdmin: { id: string; role: string },
+  teacherId: string
+): Promise<InviteTeacherResult> {
+  assertAdmin(currentAdmin);
+
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(users)
+      .where(and(eq(users.id, teacherId), eq(users.role, "teacher")))
+      .limit(1);
+    if (!existing) throw new NotFoundError("Teacher not found");
+    if (!existing.mustChangePassword) {
+      throw new ConflictError("This teacher has already activated their account");
+    }
+
+    await tx
+      .update(users)
+      .set({
+        passwordHash,
+        mustChangePassword: true,
+        activatedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, teacherId));
+
+    // Audit metadata never includes the temporary password.
+    await auditLog({
+      actorId: currentAdmin.id,
+      action: "user.invite",
+      targetType: "user",
+      targetId: teacherId,
+      metadata: { email: existing.email, reinvite: true },
+    });
+
+    return {
+      id: existing.id,
+      email: existing.email,
+      name: existing.name,
       temporaryPassword,
     };
   });

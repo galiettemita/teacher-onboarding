@@ -56,10 +56,11 @@ Variables*). Mark all of them **Encrypted** unless noted.
 | `SUPABASE_BUCKET` | yes | Bucket name (`teacher-onboarding-private` by default). |
 | `CRON_SECRET` | yes | Long random string (≥32 bytes). Vercel Cron sends it as `Authorization: Bearer …`. |
 | `EXPIRING_SOON_WINDOW_DAYS` | no | Integer days (default `30`). |
-| `EMAIL_FROM`, `EMAIL_SERVER` | Auth.js | Used by Auth.js for magic links. |
-| `EMAIL_PROVIDER` | no | `console` (default, dev), `resend`, or `sendgrid`. Selects the outbound email provider for teacher invites. |
-| `RESEND_API_KEY` | when `EMAIL_PROVIDER=resend` | Server-only. **Never** prefix with `NEXT_PUBLIC_`. The build-time leakage check (`pnpm test:leakage`) catches accidental leaks into `.next/static/**`. |
-| `SENDGRID_API_KEY` | when `EMAIL_PROVIDER=sendgrid` | Server-only. **Never** prefix with `NEXT_PUBLIC_`. Use SendGrid Single Sender Verification if sending from a Gmail address. |
+
+> **No email configuration is needed.** The portal sends no email. Teacher
+> invitations are manual: inviting a teacher returns a login URL, a one-time
+> temporary password, and a copyable invitation message that the admin
+> delivers out-of-band (copy/paste).
 
 ### Never log or echo these
 
@@ -113,14 +114,10 @@ Run through this list before flipping DNS. Every box must be checked.
 - [ ] **Cron**: `CRON_SECRET` set, `vercel.json` registers
       `/api/cron/expiry`, manual `curl` to the endpoint with the secret
       returns 200.
-- [ ] **Email invites**: `EMAIL_PROVIDER` set (`console` for staging,
-      `resend` or `sendgrid` for production). When `resend`: `RESEND_API_KEY`
-      set as an encrypted env var and the sending domain is verified at the
-      provider. When `sendgrid`: `SENDGRID_API_KEY` set as an encrypted env var
-      and the sender email is verified in SendGrid. In either case,
-      `sender_email` in `email_settings` must match a verified sender.
-      `pnpm test:leakage` runs in CI to confirm provider keys never appear in
-      `.next/static/**`.
+- [ ] **Invitations**: no email configuration required — invitations are
+      manual. Confirm an admin can invite a teacher and receives a login URL,
+      a one-time temporary password, and a copyable invitation message to
+      deliver out-of-band.
 - [ ] **Headers**: `curl -I https://your-site/login` shows
       `Strict-Transport-Security`, `Content-Security-Policy`,
       `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,

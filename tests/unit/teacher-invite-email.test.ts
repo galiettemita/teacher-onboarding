@@ -11,14 +11,16 @@ const ctx = {
 };
 
 describe("teacher invite email", () => {
-  it("includes the login URL and temporary password", () => {
+  it("includes the login URL, temporary password, and activation instruction", () => {
     const rendered = renderTeacherInvite(ctx);
 
     expect(rendered.subject).toContain("Sample Elementary School");
     expect(rendered.text).toContain("https://onboarding.example.org/login");
     expect(rendered.text).toContain("temporary-test-password");
+    expect(rendered.text).toContain("create your own password");
     expect(rendered.html).toContain("https://onboarding.example.org/login");
     expect(rendered.html).toContain("temporary-test-password");
+    expect(rendered.html).toContain("create your own password");
   });
 
   it("escapes teacher and password values in HTML", () => {

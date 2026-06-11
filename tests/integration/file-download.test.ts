@@ -53,6 +53,10 @@ vi.mock("@/lib/db/queries/teacher-documents", () => ({
     docToReturn && docToReturn.id === id ? docToReturn : null,
 }));
 
+vi.mock("@/lib/db/queries/activation", () => ({
+  getActivationStatus: async () => ({ mustChangePassword: false }),
+}));
+
 vi.mock("@/lib/storage", async () => {
   const actual = await vi.importActual<typeof import("@/lib/storage")>(
     "@/lib/storage"

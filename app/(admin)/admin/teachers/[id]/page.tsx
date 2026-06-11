@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth/guards";
 import { AdminNav } from "@/components/admin/nav";
 import { ReviewActions } from "@/components/admin/review-actions";
 import { StatusBadge } from "@/components/status-badge";
+import { ReinviteTeacher } from "@/components/admin/reinvite-teacher";
 import { getTeacherDetail } from "@/lib/db/queries/admin-teachers";
 import { deriveUiStatus } from "@/lib/expiry";
 import { NotFoundError } from "@/lib/errors";
@@ -62,12 +63,37 @@ export default async function TeacherDetailPage({
               <dd className="text-slate-900">{profile.gradeLevel ?? "—"}</dd>
             </div>
             <div>
-              <dt className="text-slate-500">Email verified</dt>
+              <dt className="text-slate-500">Account created</dt>
               <dd className="text-slate-900">
-                {teacher.emailVerified ? "Yes" : "No (invite pending)"}
+                {teacher.mustChangePassword ? (
+                  "No (Account Creation Pending)"
+                ) : (
+                  <>
+                    Yes
+                    {teacher.activatedAt ? (
+                      <span className="text-slate-500">
+                        {" "}
+                        · {formatDate(teacher.activatedAt)}
+                      </span>
+                    ) : null}
+                  </>
+                )}
               </dd>
             </div>
           </dl>
+
+          {teacher.mustChangePassword ? (
+            <div className="mt-6 border-t border-slate-200 pt-4">
+              <h2 className="text-sm font-medium text-slate-900">Account activation pending</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                This teacher hasn&apos;t created their password yet. Re-invite to generate a new
+                temporary password — the previous one stops working immediately.
+              </p>
+              <div className="mt-3">
+                <ReinviteTeacher teacherId={teacher.id} />
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">

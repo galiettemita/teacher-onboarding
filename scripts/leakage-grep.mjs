@@ -82,11 +82,6 @@ const SENTINEL_STRINGS = [
   "service-role",
   // Supabase env var names that must never appear in the client bundle
   "SUPABASE_BUCKET",
-  // Phase 6 — email provider secrets are server-only; a NEXT_PUBLIC_-prefixed
-  // variant or a literal echo into a client component would smuggle them into
-  // .next/static. The literal value sweep below is the second line of defence.
-  "RESEND_API_KEY",
-  "SENDGRID_API_KEY",
 ];
 
 const STATIC_FILES = walk(STATIC_DIR);
@@ -192,47 +187,6 @@ if (literalValue && literalValue.length >= 16) {
   );
   process.exit(1);
 }
-
-// 3. Phase 6 — provider API key literal sweeps over .next/static/**.
-//    The sentinel-string sweep above already catches the variable names;
-//    this sweep catches literal values (a real attacker exfil vector if a
-//    secret got string-interpolated into a client component). We scan ONLY
-//    .next/static/** because the server bundle is allowed to mention secrets
-//    via process.env reads.
-function scanOptionalStaticSecret(envName) {
-  let literal = process.env[envName];
-  for (const p of envCandidates) {
-    if (literal) break;
-    const env = loadDotEnv(p);
-    if (env[envName]) literal = env[envName];
-  }
-
-  if (literal && literal.length >= 16) {
-    for (const file of STATIC_FILES) {
-      let content;
-      try {
-        content = fs.readFileSync(file, "utf8");
-      } catch {
-        continue;
-      }
-      if (content.includes(literal)) {
-        errors.push(
-          `Found literal ${envName} value in ${path.relative(ROOT, file)}`
-        );
-      }
-    }
-  } else if (!SKIP_LITERAL) {
-    // Provider keys are optional (default provider is `console`), so we don't
-    // hard-fail when absent — but we DO log so CI can confirm the sweep had
-    // something to look for when that provider is enabled.
-    console.warn(
-      `[leakage] note: ${envName} not set; skipped literal-value sweep for it.`
-    );
-  }
-}
-
-scanOptionalStaticSecret("RESEND_API_KEY");
-scanOptionalStaticSecret("SENDGRID_API_KEY");
 
 if (errors.length > 0) {
   console.error("FAIL: secret leakage check found matches:");

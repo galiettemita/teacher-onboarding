@@ -34,6 +34,10 @@ vi.mock("@/lib/auth/config", () => ({
   auth: async () => (sessionUser ? { user: sessionUser } : null),
 }));
 
+vi.mock("@/lib/db/queries/activation", () => ({
+  getActivationStatus: async () => ({ mustChangePassword: false }),
+}));
+
 vi.mock("@/lib/db/client", () => {
   // tag each insert with its target table by inspecting the args passed in.
   const insert = vi.fn((tableRef: { _: { name?: string } } | unknown) => {

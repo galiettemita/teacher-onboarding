@@ -28,8 +28,8 @@ export interface SettingsCtx {
 }
 
 /**
- * A single rendered email. Templates return one of these; the caller
- * hands it to `sendEmail`.
+ * A single rendered message. Templates return one of these; the caller
+ * surfaces it to the admin as copyable invitation content.
  */
 export interface RenderedEmail {
   subject: string;

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireTeacher } from "@/lib/auth/guards";
+import { requireTeacherReady } from "@/lib/auth/guards";
 import { listMyDocumentsWithType } from "@/lib/db/queries/teacher-documents";
 import { StatusBadge } from "@/components/status-badge";
 import { deriveUiStatus } from "@/lib/expiry";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * itself never carries a storage URL.
  */
 export default async function TeacherDocumentsPage() {
-  const user = await requireTeacher();
+  const user = await requireTeacherReady();
   const docs = await listMyDocumentsWithType(user);
 
   return (
