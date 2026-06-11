@@ -25,9 +25,11 @@ export type AuditAction =
   | "doc_type.deactivate"
   | "user.invite"
   | "user.password_change"
+  | "user.profile_update"
   | "file.download"
   | "file.missing"
-  | "report.export";
+  | "report.export"
+  | "teacher.bulk_download";
 
 export type AuditTargetType =
   | "document"

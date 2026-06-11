@@ -2,12 +2,15 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   documentTypes,
+  teacherProfiles,
   teacherDocuments,
   type DocumentType,
   type TeacherDocument,
+  type TeacherProfile,
 } from "@/lib/db/schema";
 import type { SessionUser } from "@/lib/auth/guards";
 import { linkSupersession } from "@/lib/expiry/supersession";
+import { isDocTypeApplicable } from "@/lib/staff/status";
 
 /**
  * All teacher-document queries take `currentUser` and filter by it. There is
@@ -77,11 +80,25 @@ export async function listMyDocumentTypesWithStatus(
 ): Promise<DocumentTypeWithStatus[]> {
   assertTeacher(currentUser);
 
-  const types = await db
+  const allTypes = await db
     .select()
     .from(documentTypes)
     .where(eq(documentTypes.active, true))
     .orderBy(documentTypes.name);
+
+  // Load the teacher's profile so we can filter to the documents that apply to
+  // *this* teacher (first-year vs returning). Missing profile is treated as a
+  // returning staff member with no anchor date — the safe default.
+  const [profile] = await db
+    .select()
+    .from(teacherProfiles)
+    .where(eq(teacherProfiles.userId, currentUser.id))
+    .limit(1);
+
+  const now = new Date();
+  const types = profile
+    ? allTypes.filter((dt) => isDocTypeApplicable(dt, profile, now))
+    : allTypes.filter((dt) => dt.applicability === "all_staff");
 
   // Fetch all of this teacher's non-superseded rows in one query.
   const rows = await db
@@ -103,7 +120,6 @@ export async function listMyDocumentTypesWithStatus(
     }
   }
 
-  const now = new Date();
   return types.map((dt) => {
     const currentDoc = latestByType.get(dt.id) ?? null;
     return {
@@ -113,6 +129,9 @@ export async function listMyDocumentTypesWithStatus(
     };
   });
 }
+
+/** Re-export so server pages can load the profile via one import path. */
+export type { TeacherProfile };
 
 /**
  * Return every document this teacher has uploaded (including superseded

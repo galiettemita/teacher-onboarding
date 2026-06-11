@@ -12,6 +12,7 @@ import {
   type DocumentType,
 } from "@/lib/db/schema";
 import { auditLog } from "@/lib/audit/log";
+import { isDocTypeApplicable } from "@/lib/staff/status";
 import {
   ConflictError,
   ForbiddenError,
@@ -88,13 +89,15 @@ export async function listAllTeachers(
 ): Promise<TeacherListRow[]> {
   assertAdmin(currentAdmin);
 
-  // Active+required doc types define what "complete" means today.
+  // Active+required doc types define what "complete" means — but completion is
+  // computed *per teacher* against the subset that applies to them (first-year
+  // vs returning), so returning staff are never marked incomplete for
+  // first-year-only paperwork they were never asked for.
   const requiredTypes = await db
     .select()
     .from(documentTypes)
     .where(and(eq(documentTypes.active, true), eq(documentTypes.required, true)));
-  const requiredTypeIds = new Set(requiredTypes.map((t) => t.id));
-  const totalRequired = requiredTypeIds.size;
+  const now = new Date();
 
   // Base query: every teacher user + their profile.
   const whereParts = [eq(users.role, "teacher")];
@@ -121,7 +124,15 @@ export async function listAllTeachers(
   const result: TeacherListRow[] = rows.map(({ user, profile }) => {
     const docs = docsByUser.get(user.id) ?? [];
 
-    // Approved coverage of required active doc types.
+    // The required doc types that apply to THIS teacher right now.
+    const applicableRequiredTypeIds = new Set(
+      requiredTypes
+        .filter((t) => isDocTypeApplicable(t, profile, now))
+        .map((t) => t.id)
+    );
+    const totalRequired = applicableRequiredTypeIds.size;
+
+    // Approved coverage of the applicable required doc types.
     const approvedRequiredTypeIds = new Set<string>();
     let pendingCount = 0;
     let expiredCount = 0;
@@ -130,7 +141,7 @@ export async function listAllTeachers(
     for (const d of docs) {
       if (d.status === "pending") pendingCount += 1;
       if (d.status === "expired") expiredCount += 1;
-      if (d.status === "approved" && requiredTypeIds.has(d.documentTypeId)) {
+      if (d.status === "approved" && applicableRequiredTypeIds.has(d.documentTypeId)) {
         approvedRequiredTypeIds.add(d.documentTypeId);
       }
       const candidate = d.reviewedAt ?? d.uploadedAt;
@@ -275,6 +286,8 @@ export interface InviteTeacherInput {
   phone?: string | null;
   hireDate?: string | null; // ISO date 'YYYY-MM-DD'
   gradeLevel?: string | null;
+  staffStatus?: "new_first_year" | "returning" | null;
+  firstYearStartDate?: string | null; // ISO date 'YYYY-MM-DD'
 }
 
 export interface InviteTeacherResult {
@@ -343,11 +356,21 @@ export async function inviteTeacher(
       })
       .returning();
 
+    const staffStatus =
+      input.staffStatus === "new_first_year" ? "new_first_year" : "returning";
+    // For a new first-year hire with no explicit first-year start, anchor on the
+    // hire date so the one-year window can be computed.
+    const firstYearStart =
+      input.firstYearStartDate?.trim() ||
+      (staffStatus === "new_first_year" ? input.hireDate?.trim() || null : null);
+
     await tx.insert(teacherProfiles).values({
       userId: created.id,
       phone: input.phone?.trim() || null,
       hireDate: input.hireDate?.trim() || null,
       gradeLevel: input.gradeLevel?.trim() || null,
+      staffStatus,
+      firstYearStartDate: firstYearStart,
     });
 
     // Audit row metadata never includes the temporary password.
@@ -428,5 +451,95 @@ export async function reinviteTeacher(
       name: existing.name,
       temporaryPassword,
     };
+  });
+}
+
+export interface UpdateTeacherProfileInput {
+  staffStatus?: "new_first_year" | "returning";
+  hireDate?: string | null; // 'YYYY-MM-DD' or null to clear
+  firstYearStartDate?: string | null; // 'YYYY-MM-DD' or null to clear
+  phone?: string | null;
+  gradeLevel?: string | null;
+}
+
+/**
+ * Admin edits a teacher's onboarding metadata (staff status + dates + profile
+ * fields). Only ever touches `teacher_profiles` — never the auth user, never
+ * any uploaded document. Writes a `user.profile_update` audit row.
+ *
+ * Setting staff status to new_first_year with no first-year start date anchors
+ * it on the hire date when available, so the one-year window is computable.
+ */
+export async function updateTeacherProfile(
+  currentAdmin: { id: string; role: string },
+  teacherId: string,
+  input: UpdateTeacherProfileInput
+): Promise<TeacherProfile> {
+  assertAdmin(currentAdmin);
+
+  return db.transaction(async (tx) => {
+    const [teacher] = await tx
+      .select()
+      .from(users)
+      .where(and(eq(users.id, teacherId), eq(users.role, "teacher")))
+      .limit(1);
+    if (!teacher) throw new NotFoundError("Teacher not found");
+
+    const [profile] = await tx
+      .select()
+      .from(teacherProfiles)
+      .where(eq(teacherProfiles.userId, teacherId))
+      .limit(1);
+    if (!profile) throw new NotFoundError("Teacher profile missing");
+
+    const patch: Partial<typeof teacherProfiles.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+
+    if (input.staffStatus !== undefined) {
+      if (input.staffStatus !== "new_first_year" && input.staffStatus !== "returning") {
+        throw new ValidationError("Invalid staff status");
+      }
+      patch.staffStatus = input.staffStatus;
+    }
+    if (input.hireDate !== undefined) patch.hireDate = input.hireDate?.trim() || null;
+    if (input.phone !== undefined) patch.phone = input.phone?.trim() || null;
+    if (input.gradeLevel !== undefined) patch.gradeLevel = input.gradeLevel?.trim() || null;
+
+    if (input.firstYearStartDate !== undefined) {
+      patch.firstYearStartDate = input.firstYearStartDate?.trim() || null;
+    }
+
+    // Auto-anchor a new first-year hire on the hire date when no explicit
+    // first-year start exists after applying the patch.
+    const resolvedStatus = patch.staffStatus ?? profile.staffStatus;
+    const resolvedFirstYear =
+      patch.firstYearStartDate !== undefined
+        ? patch.firstYearStartDate
+        : profile.firstYearStartDate;
+    const resolvedHire =
+      patch.hireDate !== undefined ? patch.hireDate : profile.hireDate;
+    if (resolvedStatus === "new_first_year" && !resolvedFirstYear && resolvedHire) {
+      patch.firstYearStartDate = resolvedHire;
+    }
+
+    const [updated] = await tx
+      .update(teacherProfiles)
+      .set(patch)
+      .where(eq(teacherProfiles.userId, teacherId))
+      .returning();
+
+    await auditLog({
+      actorId: currentAdmin.id,
+      action: "user.profile_update",
+      targetType: "user",
+      targetId: teacherId,
+      metadata: {
+        staffStatus: updated.staffStatus,
+        firstYearStartDate: updated.firstYearStartDate,
+      },
+    });
+
+    return updated;
   });
 }

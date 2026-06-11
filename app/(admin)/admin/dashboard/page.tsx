@@ -2,10 +2,14 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/guards";
 import { AdminNav } from "@/components/admin/nav";
 import { getDashboardSummary } from "@/lib/db/queries/admin-teachers";
+import { getExpirationCounts } from "@/lib/db/queries/expiration";
+
+export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
   const user = await requireAdmin();
   const summary = await getDashboardSummary({ role: user.role });
+  const expiration = await getExpirationCounts({ role: user.role });
 
   const tiles: Array<{ label: string; value: number; href?: string; tone?: string }> = [
     { label: "Total teachers", value: summary.totalTeachers, href: "/admin/teachers" },
@@ -29,8 +33,15 @@ export default async function AdminDashboard() {
     },
     {
       label: "Expired documents",
-      value: summary.expiredDocuments,
-      tone: "text-slate-700",
+      value: expiration.expired,
+      href: "/admin/expirations",
+      tone: "text-rose-700",
+    },
+    {
+      label: "Expiring soon",
+      value: expiration.expiringSoon,
+      href: "/admin/expirations",
+      tone: "text-orange-700",
     },
   ];
 
@@ -48,7 +59,7 @@ export default async function AdminDashboard() {
           </Link>
         </div>
 
-        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           {tiles.map((t) => {
             const card = (
               <div className="bg-white rounded-xl border border-slate-200 p-5 h-full">

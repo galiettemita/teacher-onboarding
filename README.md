@@ -34,6 +34,27 @@ response, [`docs/SECURITY.md`](./docs/SECURITY.md).
   renewal_months`. A daily cron sweeps past-due `approved` docs to
   `expired`. A new upload after expiry creates a fresh row and links the
   old one via `superseded_by`.
+- **Staff-specific documents**: each teacher is marked **new first-year** or
+  **returning** staff. Document types carry an applicability (`all_staff`,
+  `new_first_year_only`, `returning_staff_only`); first-year-only paperwork is
+  required only while a teacher is in their first year (computed from the
+  first-year start / hire date), and returning staff are never marked
+  incomplete for documents they don't need. Historical uploads are always
+  preserved.
+- **Two-year expiration tracking**: document types have a category
+  (`medical`, `training`, `general`, `other`). Medical forms and training
+  certifications renew every 24 months. Admins get an **Expirations** alert
+  center (`/admin/expirations`) listing every expired / expiring-soon document
+  with teacher, dates, and days remaining/overdue, plus dashboard tiles.
+- **Renewal reminder drafts**: on a teacher's admin page, "Generate expiration
+  email draft" produces a copyable, school-appropriate reminder listing only
+  that teacher's expired / expiring documents. Nothing is sent automatically —
+  the admin copies and delivers it, matching the email-free invite flow.
+- **Bulk download**: admin-only "Download all documents" builds a single ZIP
+  (with a `manifest.csv`) of one teacher's uploads. Bytes flow through the
+  private storage adapter only; archive paths are sanitized; a missing file is
+  noted in the manifest instead of crashing the archive; the download is
+  audit-logged.
 - **Security**: rate limits on `/api/auth/**`, `/api/upload`, `/api/files/**`;
   HSTS / CSP / X-Frame-Options / no-sniff / Referrer-Policy /
   Permissions-Policy on every response; every admin mutation and file
