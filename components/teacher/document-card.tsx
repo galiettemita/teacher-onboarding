@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { DocumentTypeWithStatus } from "@/lib/db/queries/teacher-documents";
 import { StatusBadge } from "@/components/status-badge";
 import { UploadModal } from "@/components/upload/upload-modal";
+import { getDocumentResources } from "@/lib/teacher/document-resources";
 
 /**
  * One card per `document_type`. Client component so the upload modal can
@@ -17,6 +18,7 @@ export type DocumentCardProps = {
 export function DocumentCard({ entry }: DocumentCardProps) {
   const { documentType, currentDoc, uiStatus } = entry;
   const [open, setOpen] = useState(false);
+  const { note, links } = getDocumentResources(documentType.name);
 
   const primaryLabel =
     uiStatus === "missing"
@@ -40,6 +42,31 @@ export function DocumentCard({ entry }: DocumentCardProps) {
         </div>
         <StatusBadge status={uiStatus} />
       </div>
+
+      {note && (
+        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {note}
+        </p>
+      )}
+
+      {links.length > 0 && (
+        <ul className="mt-3 space-y-1 text-sm">
+          {links.map((l) => (
+            <li key={l.url}>
+              <a
+                href={l.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-medium text-blue-700 underline hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {l.label}
+                <span aria-hidden="true">↗</span>
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {uiStatus === "rejected" && currentDoc?.rejectionReason && (
         <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
