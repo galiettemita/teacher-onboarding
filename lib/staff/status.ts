@@ -125,18 +125,18 @@ export function isDocTypeApplicable(
 
 /** Plain-English label for a staff status (grandma-friendly). */
 export function staffStatusLabel(status: StaffStatus | string): string {
-  return status === "new_first_year" ? "New first-year staff" : "Returning staff";
+  return status === "new_first_year" ? "New Staff" : "Current Staff";
 }
 
-/** Plain-English label for a document's applicability. */
+/** Plain-English label for a document's applicability (grandma-friendly). */
 export function applicabilityLabel(applicability: DocApplicability | string): string {
   switch (applicability) {
     case "new_first_year_only":
-      return "Only required during first year";
+      return "New staff only";
     case "returning_staff_only":
-      return "Only required for returning staff";
+      return "Current staff only";
     case "all_staff":
     default:
-      return "Applies to all staff";
+      return "Everyone (new + current staff)";
   }
 }

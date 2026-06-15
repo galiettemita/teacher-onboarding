@@ -226,11 +226,12 @@ export function InviteTeacherForm() {
 
       <fieldset className="rounded-md border border-slate-200 p-4">
         <legend className="px-1 text-sm font-medium text-slate-700">
-          Is this a new or returning staff member?
+          Is this a new or current staff member?
         </legend>
         <p className="text-xs text-slate-500 mb-3">
-          New first-year staff are asked for extra first-year paperwork. After their first
-          year, those first-year-only documents are no longer required.
+          New staff are asked for all onboarding forms (including the Fingerprinting
+          receipt and High school Diploma/ College Degree). Current staff only need the
+          Medical Form and the two Health &amp; Safety / Mandated Reporter certificates.
         </p>
         <div className="space-y-2">
           <label className="flex items-start gap-2 text-sm text-slate-800">
@@ -242,9 +243,10 @@ export function InviteTeacherForm() {
               onChange={() => update("staffStatus", "new_first_year")}
             />
             <span>
-              <span className="font-medium">New first-year staff</span>
+              <span className="font-medium">New Staff</span>
               <span className="block text-xs text-slate-500">
-                In their first year. Uses the hire date above to know when the first year ends.
+                A new hire being onboarded — asked for all 5 forms. Uses the hire date
+                above to know when their first year ends.
               </span>
             </span>
           </label>
@@ -257,9 +259,10 @@ export function InviteTeacherForm() {
               onChange={() => update("staffStatus", "returning")}
             />
             <span>
-              <span className="font-medium">Returning staff</span>
+              <span className="font-medium">Current Staff</span>
               <span className="block text-xs text-slate-500">
-                Already been here a year or more. Skips first-year-only documents.
+                Returning/established staff — only asked for the Medical Form and the two
+                certificates.
               </span>
             </span>
           </label>

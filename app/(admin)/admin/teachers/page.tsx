@@ -5,6 +5,7 @@ import {
   listAllTeachers,
   type CompletionState,
 } from "@/lib/db/queries/admin-teachers";
+import { staffStatusLabel } from "@/lib/staff/status";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +98,7 @@ export default async function TeachersListPage({
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="text-left px-4 py-3 font-medium">Teacher</th>
+                <th className="text-left px-4 py-3 font-medium">Staff</th>
                 <th className="text-left px-4 py-3 font-medium">Completion</th>
                 <th className="text-left px-4 py-3 font-medium">Status</th>
                 <th className="text-left px-4 py-3 font-medium">Last activity</th>
@@ -106,7 +108,7 @@ export default async function TeachersListPage({
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                     No teachers match these filters.
                   </td>
                 </tr>
@@ -121,6 +123,17 @@ export default async function TeachersListPage({
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-900">{r.user.name}</div>
                         <div className="text-slate-500">{r.user.email}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {r.profile.staffStatus === "new_first_year" ? (
+                          <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 text-xs font-medium">
+                            {staffStatusLabel(r.profile.staffStatus)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 text-xs font-medium">
+                            {staffStatusLabel(r.profile.staffStatus)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">

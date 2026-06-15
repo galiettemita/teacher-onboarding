@@ -2,9 +2,11 @@
  * Seed the database with:
  *   - 1 admin user (idempotent by email)
  *   - 2 sample teacher users + matching teacher_profiles
- *   - 10 starter document_types (the Phase 1 approved list)
+ *   - the 5 required document_types (lib/db/document-catalog.ts)
  *
- * All writes are upserts so this script is safe to re-run.
+ * All writes are upserts so this script is safe to re-run. Any document type
+ * NOT in the canonical catalog is deactivated (never hard-deleted) so the
+ * teacher/admin views show exactly the five forms.
  *
  * Usage: pnpm db:seed
  *
@@ -13,106 +15,18 @@
  *   SEED_TEACHER_EMAIL / SEED_TEACHER_PASSWORD / SEED_TEACHER_NAME
  */
 import bcrypt from "bcryptjs";
-import { eq, sql } from "drizzle-orm";
+import { eq, notInArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { users, teacherProfiles, documentTypes } from "@/lib/db/schema";
+import {
+  REQUIRED_DOCUMENT_TYPES,
+  REQUIRED_DOCUMENT_TYPE_NAMES,
+  type CatalogDocType,
+} from "@/lib/db/document-catalog";
 
-type StaffApplicability = "all_staff" | "new_first_year_only" | "returning_staff_only";
-
-type StarterDocType = {
-  name: string;
-  description: string;
-  required: boolean;
-  renewalMonths: number;
-  applicability: StaffApplicability;
-};
-
-const STARTER_DOCUMENT_TYPES: StarterDocType[] = [
-  {
-    name: "Employment Application",
-    description: "Completed application on file.",
-    required: true,
-    renewalMonths: 0, // one-time, but kept in schema; renewal logic will treat 0 as "no renewal"
-    applicability: "all_staff",
-  },
-  {
-    name: "Background Check",
-    description: "Cleared background check from an approved provider.",
-    required: true,
-    renewalMonths: 24,
-    applicability: "all_staff",
-  },
-  {
-    name: "Fingerprint Clearance",
-    description: "State-issued fingerprint clearance card or letter.",
-    required: true,
-    renewalMonths: 24,
-    applicability: "all_staff",
-  },
-  {
-    name: "Mandated Reporter Training",
-    description: "Certificate of completion for mandated reporter training.",
-    required: true,
-    renewalMonths: 24,
-    applicability: "all_staff",
-  },
-  {
-    name: "Child Abuse Prevention Training",
-    description: "Certificate of completion for child abuse prevention training.",
-    required: true,
-    renewalMonths: 24,
-    applicability: "all_staff",
-  },
-  {
-    name: "CPR / First Aid Certificate",
-    description: "Current CPR and First Aid certificate.",
-    required: true,
-    renewalMonths: 24,
-    applicability: "all_staff",
-  },
-  {
-    name: "TB Test / Health Screening",
-    description: "Negative TB test result or health clearance from a provider.",
-    required: true,
-    renewalMonths: 24,
-    applicability: "all_staff",
-  },
-  {
-    name: "ID / Driver's License",
-    description: "Copy of valid government-issued photo ID.",
-    required: true,
-    renewalMonths: 0,
-    applicability: "all_staff",
-  },
-  {
-    name: "W-4 or Tax Form",
-    description: "Completed W-4 (federal) or equivalent state tax form.",
-    required: true,
-    renewalMonths: 0,
-    applicability: "all_staff",
-  },
-  {
-    name: "Direct Deposit Form",
-    description: "Direct deposit authorization with voided check.",
-    required: true,
-    renewalMonths: 0,
-    applicability: "all_staff",
-  },
-  {
-    name: "Signed Handbook Acknowledgment",
-    description: "Signed acknowledgment that you have read the employee handbook.",
-    required: true,
-    renewalMonths: 24,
-    applicability: "all_staff",
-  },
-  {
-    name: "New Hire Orientation Packet",
-    description: "First-year orientation forms — only required during your first year.",
-    required: true,
-    renewalMonths: 0,
-    applicability: "new_first_year_only",
-  },
-];
+// The required-document catalog (the five forms) is defined once in
+// lib/db/document-catalog.ts and shared with the prod sync script + tests.
+const STARTER_DOCUMENT_TYPES = REQUIRED_DOCUMENT_TYPES;
 
 async function upsertUser(opts: {
   email: string;
@@ -183,7 +97,7 @@ async function ensureTeacherProfile(
   });
 }
 
-async function upsertDocumentType(dt: StarterDocType) {
+async function upsertDocumentType(dt: CatalogDocType) {
   await db
     .insert(documentTypes)
     .values({
@@ -264,9 +178,25 @@ async function main() {
   });
   await ensureTeacherProfile(teacher2Id, { staffStatus: "returning" });
 
-  console.log(`→ seeding ${STARTER_DOCUMENT_TYPES.length} starter document types`);
+  console.log(`→ seeding ${STARTER_DOCUMENT_TYPES.length} document types`);
   for (const dt of STARTER_DOCUMENT_TYPES) {
     await upsertDocumentType(dt);
+  }
+
+  // Enforce "only these forms": deactivate any other type so it disappears
+  // from teacher dashboards and admin completion. We never hard-delete here —
+  // existing uploads keep resolving their type name and review history stays
+  // intact (matches the admin "Deactivate" behaviour).
+  const deactivated = await db
+    .update(documentTypes)
+    .set({ active: false, updatedAt: new Date() })
+    .where(notInArray(documentTypes.name, REQUIRED_DOCUMENT_TYPE_NAMES))
+    .returning({ name: documentTypes.name });
+  if (deactivated.length > 0) {
+    console.log(
+      `→ deactivated ${deactivated.length} non-catalog document type(s): ` +
+        deactivated.map((d) => d.name).join(", ")
+    );
   }
 
   console.log("");

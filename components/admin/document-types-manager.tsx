@@ -32,9 +32,9 @@ const EMPTY_DRAFT: DraftRow = {
 };
 
 const APPLICABILITY_LABELS: Record<Applicability, string> = {
-  all_staff: "Applies to all staff",
-  new_first_year_only: "Only required during first year",
-  returning_staff_only: "Only required for returning staff",
+  all_staff: "Everyone (new + current staff)",
+  new_first_year_only: "New staff only",
+  returning_staff_only: "Current staff only",
 };
 
 function DraftRowEditor({

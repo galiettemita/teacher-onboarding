@@ -78,9 +78,9 @@ export function EditStaffStatus({
             onChange={() => setStatus("new_first_year")}
           />
           <span>
-            <span className="font-medium">New first-year staff</span>
+            <span className="font-medium">New Staff</span>
             <span className="block text-xs text-slate-500">
-              Asked for first-year-only documents until the first year ends.
+              Asked for all 5 forms until their first year ends.
             </span>
           </span>
         </label>
@@ -93,9 +93,9 @@ export function EditStaffStatus({
             onChange={() => setStatus("returning")}
           />
           <span>
-            <span className="font-medium">Returning staff</span>
+            <span className="font-medium">Current Staff</span>
             <span className="block text-xs text-slate-500">
-              Skips first-year-only documents.
+              Only asked for the Medical Form and the two certificates.
             </span>
           </span>
         </label>
